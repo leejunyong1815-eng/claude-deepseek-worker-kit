@@ -1,5 +1,10 @@
 # 연결·실행 문제 확인
 
+- 새 WSL 설치: README의 필수 도구·GitHub 인증·clone 절차부터 진행한다. 설치 전 `./install.sh --check`, 설치 후 `deepseek-doctor`로 확인한다.
+- 명령을 못 찾음: `./install.sh --setup-path` 후 `. "$HOME/.config/deepseek-worker/shell.sh"`로 현재 터미널에 적용한다.
+- Windows의 Claude가 잡힘: WSL 안에서 Linux용 Claude Code를 설치하고 ~/.local/bin을 PATH 앞에 둔다.
+- checkout 이동: 새 위치에서 `./install.sh --update`를 실행해 템플릿 경로를 갱신한다.
+
 - 설정 없음: `./install.sh --install-only`는 도구만 설치한다. 서버 정보를 받은 뒤 `./install.sh`로 설정한다.
 - 401/403: 키와 서버 권한을 관리자에게 확인한다. 키를 채팅·로그·GitHub issue에 붙이지 않는다.
 - 모델/컨텍스트 오류: 실제 등록 ID와 요청당 한도를 사용한다. 공식 API의 별칭이나 1M 한도를 가정하지 않는다.

@@ -1,6 +1,6 @@
 # 기존 설치·프로젝트 갱신
 
-요약 절차는 [README 업데이트 안내](../README.md#업데이트데모검증)에 있다.
+요약 절차는 [README 업데이트 안내](../README.md#업데이트)에 있다.
 실행 중 작업은 먼저 종료하거나 끝날 때까지 기다린다. 업데이트는 모델 호출이나 작업 종료를 자동 수행하지 않는다.
 
 ## 실행기와 프로필 프롬프트
@@ -17,6 +17,9 @@
 
 `env`, `env.<프로필>`, 프로젝트 파일, API 키, 모델·컨텍스트 설정은 변경하지 않는다.
 서버 조회·프로브·모델 호출·새 프로필 생성도 하지 않는다. 설정 갱신에는 실제 Claude CLI나 서버가 필요하지 않다.
+`./install.sh --check` 또는 설치된 `deepseek-doctor`로 로컬 필수 도구와 Claude CLI를 확인할 수 있다. API는 호출하지 않는다.
+PATH를 Bash에 등록하려면 `./install.sh --update --setup-path`를 사용한다. 생성된 shell.sh를 ~/.bashrc에서 한 번 읽게 하며 기존 설정은 보존한다.
+키트 checkout을 다른 경로로 옮겼다면 새 위치에서 --update를 실행해 kit_dir를 갱신한다.
 기존 설정이 없다면 일반 설치를 먼저 한다. `--update`와 `--profile`/`--render`는 함께 사용할 수 없다.
 별도 설정 경로는 기존처럼 `DEEPSEEK_WORKER_CONF_DIR`로 지정한다.
 

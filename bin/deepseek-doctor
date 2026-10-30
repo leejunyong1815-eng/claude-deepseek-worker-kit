@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+"""Read-only local installation checks. No API requests or credential output."""
+import argparse
+import os
+from pathlib import Path
+import platform
+import re
+import shlex
+import shutil
+import stat
+import subprocess
+import sys
+
+MIN_CLAUDE = (2, 1, 224)
+
+
+def main():
+    argparse.ArgumentParser(description=__doc__).parse_args()
+    failed = []
+
+    def check(name, valid, detail):
+        print(f"[{'OK' if valid else 'FAIL'}] {name}: {detail}")
+        if not valid:
+            failed.append(name)
+
+    check('platform', sys.platform.startswith('linux') and Path('/proc/sys/kernel/random/boot_id').is_file(),
+          f'{platform.system()} {platform.release()} (managed tasks require Linux / WSL2)')
+    check('Python', sys.version_info >= (3, 9), platform.python_version() + ' (requires 3.9+)')
+    for name in ('git', 'bash', 'readlink', 'find', 'cp', 'chmod'):
+        path = shutil.which(name)
+        check(name, bool(path), path or 'not found; install the Linux package inside WSL')
+    claude = shutil.which('claude')
+    check('claude', bool(claude), claude or 'not found; install Claude Code inside WSL and add ~/.local/bin to PATH')
+    if claude:
+        if re.match(r'^/mnt/[a-z]/', str(Path(claude).resolve())):
+            print('[WARN] Claude is on a Windows mount; use a Linux installation inside WSL.')
+        env = dict(os.environ, DISABLE_AUTOUPDATER='1', CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC='1')
+        try:
+            version = subprocess.run([claude, '--version'], env=env, capture_output=True, text=True, timeout=15)
+            match = re.search(r'(\d+)\.(\d+)\.(\d+)', version.stdout)
+            valid = version.returncode == 0 and match and tuple(map(int, match.groups())) >= MIN_CLAUDE
+            # Never dump CLI stderr or arbitrary output: it may contain local credentials.
+            check('Claude version', bool(valid), match.group(0) if match else 'unreadable (requires >=2.1.224)')
+            help_result = subprocess.run([claude, '--help'], env=env, capture_output=True, text=True, timeout=15)
+            for flag in ('--effort', '--name'):
+                supported = help_result.returncode == 0 and re.search(re.escape(flag) + r'(?:[\s=,]|$)', help_result.stdout)
+                check('Claude ' + flag, bool(supported), 'available' if supported else 'missing; update Claude Code')
+        except (OSError, subprocess.TimeoutExpired):
+            check('Claude CLI', False, '--version/--help failed; run claude doctor locally')
+    conf = Path(os.environ.get('DEEPSEEK_WORKER_CONF_DIR', '~/.config/deepseek-worker')).expanduser()
+    if (conf / 'env').is_file():
+        try:
+            values = {}
+            for line in (conf / 'env').read_text().splitlines():
+                name, sep, raw = line.removeprefix('export ').partition('=')
+                if sep and name.strip().startswith('LLM_'):
+                    parts = shlex.split(raw, comments=True)
+                    values[name.strip()] = parts[0] if len(parts) == 1 else ''
+            names = ('LLM_BASE_URL', 'LLM_MODEL', 'LLM_CONTEXT_WINDOW', 'LLM_API_KEY')
+            missing = [n for n in names if not values.get(n) or 'CHANGE_ME' in values[n]]
+            check('backend config', not missing, 'present (values hidden)' if not missing else 'missing fields: ' + ', '.join(missing))
+            permissions = stat.S_IMODE((conf / 'env').stat().st_mode)
+            check('config permissions', permissions == 0o600, f'{permissions:04o}; expected 0600')
+        except (OSError, ValueError):
+            check('backend config', False, 'cannot parse the local env file; contents omitted')
+    else:
+        print('[INFO] Backend is not configured yet; run ./install.sh after these checks.')
+    if (conf / 'kit_dir').is_file():
+        try:
+            kit = Path((conf / 'kit_dir').read_text().strip())
+            check('project templates', (kit / 'templates/project').is_dir(),
+                  'available' if (kit / 'templates/project').is_dir() else 'checkout moved/missing; run ./install.sh --update from its new location')
+        except OSError:
+            check('project templates', False, 'cannot read kit_dir')
+    if not shutil.which('deepseek-task'):
+        print('[WARN] deepseek-task is not on PATH. Install with --setup-path, then source the generated shell.sh.')
+    if not shutil.which('tmux'):
+        print('[INFO] tmux is optional; install it only for deepseek-duo.')
+    print('No API/model calls were made. Login, server access and project permissions need a separate check.')
+    return int(bool(failed))
+
+
+if __name__ == '__main__':
+    sys.exit(main())

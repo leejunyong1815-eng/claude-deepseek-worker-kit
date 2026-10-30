@@ -1,6 +1,10 @@
 # 첫 작업
 
-README의 설치/서버 설정을 마친 뒤 대상 Git 프로젝트에서 실행한다.
+다른 컴퓨터에서는 [README의 새 WSL 설치 절차](../README.md#새-wsl에-설치)부터 진행한다.
+필수 도구 설치 → GitHub 인증·clone → ./install.sh --check → ./install.sh --setup-path → deepseek-probe 순서다.
+기존 컴퓨터의 ~/.config 디렉터리를 복사하지 않고, API 키와 Claude 로그인은 새 WSL에서 설정한다.
+
+설치/서버 설정을 마친 뒤 대상 Git 프로젝트에서 실행한다.
 
 ```bash
 deepseek-project-init .
