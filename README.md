@@ -16,7 +16,7 @@ WSL2의 Ubuntu 22.04/24.04 기준입니다. 아래 명령은 새 컴퓨터의 Ub
 
 ```bash
 sudo apt update
-sudo apt install -y git python3 curl ca-certificates gh
+sudo apt install -y git python3 curl ca-certificates
 
 curl -fsSL https://claude.ai/install.sh | bash
 export PATH="$HOME/.local/bin:$PATH"
@@ -30,17 +30,15 @@ Claude Code는 WSL 안에 설치합니다. 설치·로그인 방법은 [공식 �
 
 ### 2. 저장소 받기
 
-비공개 저장소이므로 접근 권한이 있는 GitHub 계정으로 로그인합니다.
+공개 저장소이므로 GitHub 로그인 없이 받을 수 있습니다.
 
 ```bash
-gh auth login --hostname github.com --git-protocol https --web
 mkdir -p ~/src
 cd ~/src
-gh repo clone leejunyong1815-eng/claude-deepseek-worker-kit
+git clone https://github.com/leejunyong1815-eng/claude-deepseek-worker-kit.git
 cd claude-deepseek-worker-kit
 ```
 
-GitHub CLI의 인증·clone 옵션은 [공식 매뉴얼](https://cli.github.com/manual/gh_auth_login)을 참고하세요. 이미 Git 인증을 설정했다면 일반 `git clone`도 사용할 수 있습니다.
 기존 컴퓨터의 설정 파일이나 절대 경로를 복사할 필요는 없습니다.
 
 ### 3. 환경 확인과 키트 설치

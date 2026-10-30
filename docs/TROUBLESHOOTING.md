@@ -1,6 +1,6 @@
 # 연결·실행 문제 확인
 
-- 새 WSL 설치: README의 필수 도구·GitHub 인증·clone 절차부터 진행한다. 설치 전 `./install.sh --check`, 설치 후 `deepseek-doctor`로 확인한다.
+- 새 WSL 설치: README의 필수 도구·HTTPS clone 절차부터 진행한다. 설치 전 `./install.sh --check`, 설치 후 `deepseek-doctor`로 확인한다.
 - 명령을 못 찾음: `./install.sh --setup-path` 후 `. "$HOME/.config/deepseek-worker/shell.sh"`로 현재 터미널에 적용한다.
 - Windows의 Claude가 잡힘: WSL 안에서 Linux용 Claude Code를 설치하고 ~/.local/bin을 PATH 앞에 둔다.
 - checkout 이동: 새 위치에서 `./install.sh --update`를 실행해 템플릿 경로를 갱신한다.
