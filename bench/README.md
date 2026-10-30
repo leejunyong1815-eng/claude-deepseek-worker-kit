@@ -1,3 +1,16 @@
+# API 속도·thinking 소규모 측정
+
+`python3 -B bench/backend_probe.py --output /tmp/new-deepseek-speed.json`으로 실행한다.
+API 키는 숨김 입력 또는 LLM_API_KEY 환경변수로 전달한다. 네트워크와 실제 모델 요청이 발생한다.
+입력 4개 길이×3회(출력 최대64토큰)와 수학 문제3회(최대1024토큰)를 순차 실행한다.
+측정 시 기본 reasoning 설정을 쓰며 거절되는 reasoning_effort를 자동 우회하지 않는다.
+JSON은 실제 usage의 reasoning/출력 토큰 수, TTFT, 전체 요청 속도와 관측 스트림 속도를 구분한다.
+Prefill은 입력 크기별 TTFT 기울기 추정치이며 순수 서버 타이머가 아니다. 캐시·gateway 버퍼링의 영향이 남는다.
+결과에는 인증 정보나 thinking 원문을 저장하지 않으며 기존 결과를 덮어쓰지 않는다.
+현재 측정 결과와 한계: [서버 기록](../docs/LAB_SERVER.md).
+
+아래 구현 능력 벤치마크는 별도 선택 기능이다.
+
 # bench — 워커 단독 구현 벤치마크
 
 로컬 모델 워커에게 구현 태스크를 **혼자** 풀게 하고 숨은 테스트로 채점한다. "약하다"는 평판 대신 숫자로,

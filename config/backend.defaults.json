@@ -1,0 +1,5 @@
+{
+  "LLM_BASE_URL": "http://133.186.146.224:8081",
+  "LLM_MODEL": "DeepSeek-V4.1-Flash",
+  "LLM_CONTEXT_WINDOW": "1048576"
+}

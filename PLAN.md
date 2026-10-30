@@ -2,16 +2,21 @@
 
 구현됨 (오프라인 코드/테스트로 확인):
 - 기존 원자적 상태/잠금, 시도별 detached worktree, 프로세스 식별·취소·복구, 외부 검증 재사용.
-- DeepSeek 전용 명령·설정·상태 namespace, API 기본 주소 제거, 설정 없는 실행 차단.
+- DeepSeek 전용 명령·설정·상태 namespace, 인증 정보 없는 실행 차단.
 - 일곱 역할, 요청 effort=max, 120턴 및 별도 워커/검증 시간 제한.
 - 검증된 앞선 태스크의 파일/시도/해시를 고정하는 inputs 전달과 입력 보호.
 - 프로젝트 규칙·역할·업데이트·데모 문서 갱신, 모의 CLI 기반 테스트.
 
-연구실 서버 정보가 온 뒤 확인할 것:
-- Anthropic Messages endpoint, 등록 모델 ID와 실제 컨텍스트/출력 한도.
-- SSE·tool use·thinking을 보존하는 tool-result 연속 요청, effort 전달/적용.
+서버 확인됨 (2026-10-30, docs/LAB_SERVER.md):
+- 등록 모델 세 개, DeepSeek 기본 URL/ID와 서버 max_model_len=1048576 확인.
+- 실제 Anthropic tool_use/tool_result 연속 처리·SSE 검사 통과.
+- 4개 입력 길이×3회 + reasoning 문제 3회의 실제 API 측정, API 키 없는 원시 결과 저장.
+
+남은 확인:
+- max effort의 실제 적용: OpenAI reasoning_effort는 gateway에서 거절, Anthropic 수락만으로 적용을 보장하지 않음.
+- 1M 입력 품질·서버 내부 prefill/decode 시간·동시 처리량과 최대 출력 한도는 미측정.
 - Claude Code의 실제 권한 설정에서 작은 관리 태스크 한 개와 독립 리뷰 한 개.
-- 동시성/응답 시간/작업 품질 측정 후 예산 조정. 현재 성능 향상 수치는 없음.
+- 동시성/작업 품질 측정 후 예산 조정. 단일 서버 측정만으로 기존 버전 대비 향상을 주장하지 않음.
 
 제외: 원격 스케줄러, 모델 자동 선택/fallback 변경, 웹 UI, 자동 merge/push/PR,
-실제 유료 호출과 대규모 벤치마크. 문서의 계획은 구현이나 실제 연동의 증거가 아니다.
+대규모 벤치마크. 문서의 계획은 구현이나 실제 연동의 증거가 아니다.

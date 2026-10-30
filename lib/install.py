@@ -1,6 +1,7 @@
 """Offline installer; credentials stay in a private local shell environment file."""
 import argparse
 import getpass
+import json
 import os
 from pathlib import Path
 import re
@@ -11,6 +12,7 @@ import tempfile
 from string import Template
 
 KIT = Path(__file__).resolve().parents[1]
+BACKEND_DEFAULTS = json.loads((KIT / "config/backend.defaults.json").read_text())
 ROLES = {"plan": "planner", "research": "researcher", "impl": "implementer",
          "test": "test-author", "run": "runner", "analysis": "analyst", "review": "reviewer"}
 
@@ -90,7 +92,7 @@ def main():
             print("Existing configuration preserved (FORCE_ENV=1 to replace explicitly).")
         else:
             fields = ("LLM_BASE_URL", "LLM_API_KEY", "LLM_MODEL", "LLM_CONTEXT_WINDOW")
-            values = {k: os.environ.get(k, inherited.get(k, "")) for k in fields}
+            values = {k: os.environ.get(k, inherited.get(k, BACKEND_DEFAULTS.get(k, ""))) for k in fields}
             if not args.non_interactive:
                 for name in fields:
                     answer = (getpass.getpass("Lab API key (hidden; Enter keeps existing): ") if name == "LLM_API_KEY"

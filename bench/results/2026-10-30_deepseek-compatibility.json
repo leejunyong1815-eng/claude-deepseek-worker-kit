@@ -1,0 +1,66 @@
+{
+  "checked_at": "2026-10-30",
+  "base_url": "http://133.186.146.224:8081",
+  "registered_model_ids": [
+    "qwen3.8-27b-fp8",
+    "qwen3.8-flash-next",
+    "DeepSeek-V4.1-Flash"
+  ],
+  "selected_model": "DeepSeek-V4.1-Flash",
+  "context": {
+    "max_model_len": 1048576,
+    "source": "HTTP 400 token-budget validation",
+    "validation_error": "max_tokens=2147483647 cannot be greater than max_model_len=1048576. Please request fewer output tokens.",
+    "budget_equal_to_limit": {
+      "max_tokens": 1048576,
+      "http_status": 200,
+      "prompt_tokens": 36,
+      "completion_tokens": 14
+    },
+    "longest_measured_input_tokens": 65589,
+    "full_window_quality_tested": false
+  },
+  "api_checks": {
+    "openai_chat_completions": 200,
+    "anthropic_messages": 200,
+    "anthropic_tool_use": true,
+    "anthropic_tool_result_continuation": true,
+    "anthropic_sse": true,
+    "anthropic_thinking_block_observed": false,
+    "anthropic_max_effort_accepted": true,
+    "max_effort_application_confirmed": false
+  },
+  "effort_checks": [
+    {
+      "endpoint": "/v1/chat/completions",
+      "reasoning_effort": "low",
+      "http_status": 400,
+      "error_type": "litellm.UnsupportedParamsError",
+      "unsupported_parameter": "reasoning_effort"
+    },
+    {
+      "endpoint": "/v1/chat/completions",
+      "reasoning_effort": "high",
+      "http_status": 400,
+      "error_type": "litellm.UnsupportedParamsError",
+      "unsupported_parameter": "reasoning_effort"
+    },
+    {
+      "endpoint": "/v1/chat/completions",
+      "reasoning_effort": "max",
+      "http_status": 400,
+      "error_type": "litellm.UnsupportedParamsError",
+      "unsupported_parameter": "reasoning_effort"
+    }
+  ],
+  "initial_exploratory_request": {
+    "prompt_tokens": 68,
+    "completion_tokens": 465,
+    "reasoning_tokens": 288,
+    "ttft_seconds": 1.2132559770107036,
+    "total_seconds": 1.9926856610109098,
+    "end_to_end_tokens_per_second": 233.35341298341092,
+    "note": "separate exploratory request; not one of the three repeated measurements"
+  },
+  "cli_integration_tested": false
+}

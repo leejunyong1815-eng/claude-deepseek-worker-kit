@@ -7,8 +7,10 @@ Claude가 목표와 수용 기준을 관리하고, **연구실 DeepSeek Flash 4.
 기존 [claude-local-worker-kit](https://github.com/leejunyong1815-eng/claude-local-worker-kit)의 실행기·worktree 격리·외부 검증·업데이트 도구를 재사용한 **별도 저장소**다.
 기존 Qwen 버전과 함께 설치할 수 있도록 실행 파일, 설정, 태스크 상태 경로를 분리했다.
 
-연구실 서버의 주소·정확한 모델 ID·컨텍스트 한도·API 키는 아직 제공되지 않았다.
-**공식 API 주소나 모델 별칭으로 자동 연결하지 않는다.** 실제 속도·품질·thinking 적용 여부도 아직 측정하지 않았다.
+기본 서버는 `http://133.186.146.224:8081`, 모델은 `DeepSeek-V4.1-Flash`, 컨텍스트는 **1,048,576토큰(1M)**이다.
+서버의 모델 목록과 한도 오류로 확인했으며 공식 API나 다른 모델로 자동 fallback하지 않는다.
+**API 키는 Git에 포함하지 않는다.** 설치 시 별도로 입력한다.
+실제 API 호환성·thinking 토큰 수·속도 측정 근거와 제한은 [서버 확인 기록](docs/LAB_SERVER.md)에 있다.
 
 ## 시작하기
 
@@ -24,21 +26,23 @@ export PATH="$HOME/.local/deepseek-worker/bin:$PATH"
 ./tests/selftest.sh
 ```
 
-서버 정보를 받은 뒤 다음 명령으로 설정한다. URL은 Anthropic Messages 호환 endpoint여야 하며,
+다음 명령으로 설정한다. URL·모델·컨텍스트 질문은 Enter로 확인된 기본값을 사용한다.
+주소를 바꿀 때는 Anthropic Messages 호환 endpoint여야 하며,
 끝에 `/v1`을 붙이지 않는다. 예를 들어 gateway의 `/anthropic` 경로는 유지한다.
 키는 숨김 입력으로 받고 `~/.config/deepseek-worker/env`에 권한 0600으로 저장한다.
 
 ```bash
 ./install.sh
-# 질문: 연구실 URL, API 키(숨김), 등록된 모델 ID, 실제 컨텍스트 한도
+# URL·모델·컨텍스트: Enter로 기본값 / API 키: 숨김 입력
 # API 요청은 하지 않는다. 명시적으로 연동을 검사할 때만:
 deepseek-probe
 ```
 
 설정 없는 `deepseek-worker`는 오류로 종료한다. 서버가 OpenAI Chat Completions만 제공하면 바로 연결할 수 없으므로,
 관리자에게 Anthropic Messages·SSE·tool_use/tool_result 호환 endpoint를 요청한다. 이 키트는 별도 프록시를 설치하지 않는다.
-자동 설치 시에는 `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_CONTEXT_WINDOW`를 환경변수로 전달하고
-`./install.sh --non-interactive`를 사용한다. API 키를 명령 기록이나 저장소에 직접 적지 않는다.
+자동 설치 시에는 `LLM_API_KEY`를 환경변수로 전달하고
+`./install.sh --non-interactive`를 사용한다. URL·모델·컨텍스트는 필요할 때만 같은 이름의 환경변수로 덮어쓴다.
+기존 설정/추가 프로필은 저장된 연결을 우선하며 --update는 이를 바꾸지 않는다. API 키를 명령 기록이나 저장소에 직접 적지 않는다.
 
 ## 목표 하나로 작업 맡기기
 
@@ -94,7 +98,8 @@ deepseek-main
 워커 기본 제한은 120턴·1800초, 검증은 명령별 300초이며 명세에서 시간을 바꿀 수 있다.
 더 넓은 작업과 충분한 추론을 요청하되 무제한 재시도하지 않는다. 서버/권한 오류는 구현 실패와 구분한다.
 
-`max`는 **요청한 effort**다. 연구실 gateway가 이를 전달·적용하는지는 연결 후 확인해야 한다.
+`max`는 **요청한 effort**다. 현재 gateway는 Anthropic 요청을 받지만 실제 적용은 확인되지 않았다.
+OpenAI 경로의 reasoning_effort=low/high/max는 거절됐다. 서버 기본 reasoning의 실제 토큰 수와 속도는 [측정 기록](docs/LAB_SERVER.md)에 있다.
 공식 DeepSeek의 Anthropic 호환 문서는 `output_config.effort`를 지원하고 `thinking.budget_tokens`는 무시한다고 설명한다.
 이 설명을 연구실 서버의 보장으로 간주하지 않으며, 고정 thinking 토큰 수나 속도 향상을 주장하지 않는다.
 참고: [공식 호환 문서](https://api-docs.deepseek.com/guides/anthropic_api/).
@@ -127,4 +132,4 @@ deepseek-project-update --apply /path/to/project
 `./tests/selftest.sh` 역시 오프라인 테스트다. 실제 연동 검사는 명시적인 `deepseek-probe`와 작은 관리 태스크로 별도 수행한다.
 
 현재 범위에는 원격 GPU 실행, 모델 자동 선택/fallback, 웹 UI, 자동 merge/push/PR, 대규모 벤치마크가 없다.
-서버 연결 후 남은 확인 사항은 [PLAN](PLAN.md), 소스 출처는 [UPSTREAM](UPSTREAM.md)에 기록했다.
+실제 CLI 연결과 남은 확인 사항은 [PLAN](PLAN.md), 소스 출처는 [UPSTREAM](UPSTREAM.md)에 기록했다.

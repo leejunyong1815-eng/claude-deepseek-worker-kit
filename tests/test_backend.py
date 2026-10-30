@@ -51,6 +51,22 @@ print(json.dumps({'args': sys.argv[1:], 'env': {k:v for k,v in os.environ.items(
         self.install('--non-interactive', code=2)
         self.assertFalse((self.conf / 'env').exists())
 
+    def test_lab_defaults_require_only_a_private_key(self):
+        self.env['LLM_API_KEY'] = 'offline-default-key'
+        self.install('--non-interactive')
+        data = json.loads(subprocess.check_output([str(self.prefix / 'deepseek-worker'), '-p', 'hi'],
+                                                  env=self.env, text=True))
+        self.assertEqual(data['env']['ANTHROPIC_BASE_URL'], 'http://133.186.146.224:8081')
+        self.assertEqual(data['env']['ANTHROPIC_MODEL'], 'DeepSeek-V4.1-Flash')
+        self.assertEqual(data['env']['CLAUDE_CODE_MAX_CONTEXT_TOKENS'], '1048576')
+        self.assertEqual(data['env']['ANTHROPIC_AUTH_TOKEN'], 'offline-default-key')
+
+    def test_defaults_file_never_provides_credentials(self):
+        defaults = json.loads((KIT / 'config/backend.defaults.json').read_text())
+        self.assertEqual(set(defaults), {'LLM_BASE_URL', 'LLM_MODEL', 'LLM_CONTEXT_WINDOW'})
+        result = self.install('--non-interactive', code=2)
+        self.assertIn('LLM_API_KEY is required', result.stderr)
+
     def test_configuration_is_private_offline_and_all_tiers_use_exact_alias(self):
         self.install('--non-interactive', config=True)
         self.assertEqual((self.conf / 'env').stat().st_mode & 0o777, 0o600)
