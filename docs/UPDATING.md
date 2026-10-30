@@ -1,6 +1,6 @@
 # 기존 설치·프로젝트 갱신
 
-요약 절차는 [README 업데이트 안내](../README.md#기존-설치와-프로젝트-업데이트)에 있다.
+요약 절차는 [README 업데이트 안내](../README.md#업데이트데모검증)에 있다.
 실행 중 작업은 먼저 종료하거나 끝날 때까지 기다린다. 업데이트는 모델 호출이나 작업 종료를 자동 수행하지 않는다.
 
 ## 실행기와 프로필 프롬프트
@@ -10,15 +10,15 @@
 
 `--update`의 범위는 다음과 같다.
 
-- `~/.local/bin`(또는 `--prefix`)의 키트 실행기 교체
+- `~/.local/deepseek-worker/bin`(또는 `--prefix`)의 키트 실행기 교체
 - 설정 디렉터리의 `kit_dir`를 현재 키트 경로로 갱신
-- 기존 `worker.md`·`worker.<프로필>.md`를 `prompt-backup.*`에 백업
-- 기본·추가 프로필의 생성 프롬프트 재렌더링
+- 기존 `worker.md`·`worker.<프로필>.md`와 `roles/`를 `prompt-backup.*`에 백업
+- 기본·추가 프로필의 생성 프롬프트 재렌더링과 역할 프롬프트 갱신
 
 `env`, `env.<프로필>`, 프로젝트 파일, API 키, 모델·컨텍스트 설정은 변경하지 않는다.
-서버 조회·프로브·모델 호출·새 프로필 생성도 하지 않는다. Claude CLI 버전과 필수 도구 확인은 수행한다.
+서버 조회·프로브·모델 호출·새 프로필 생성도 하지 않는다. 설정 갱신에는 실제 Claude CLI나 서버가 필요하지 않다.
 기존 설정이 없다면 일반 설치를 먼저 한다. `--update`와 `--profile`/`--render`는 함께 사용할 수 없다.
-별도 설정 경로는 기존처럼 `CLAUDE_WORKER_CONF_DIR`로 지정한다.
+별도 설정 경로는 기존처럼 `DEEPSEEK_WORKER_CONF_DIR`로 지정한다.
 
 생성 프롬프트를 직접 수정해 사용했다면 백업과 새 파일을 비교한다. 복원하려면 필요한 파일만 백업에서 되돌린다.
 env 파일은 이 업데이트에서 바뀌지 않으므로 연결 설정을 다시 입력할 필요가 없다.
@@ -26,8 +26,8 @@ env 파일은 이 업데이트에서 바뀌지 않으므로 연결 설정을 다
 ## 프로젝트 운영 규칙
 
 ```bash
-project-update --check ~/my-project
-project-update --apply ~/my-project
+deepseek-project-update --check ~/my-project
+deepseek-project-update --apply ~/my-project
 ```
 
 갱신 대상은 `templates/project`가 제공하는 AGENTS·KICKOFF·역할·태스크 양식·검사 훅·`.claude/settings.json`이다.
@@ -52,8 +52,8 @@ Git stage·commit·브랜치를 변경하거나 파일을 자동 삭제하지 �
 
 ## 충돌 검토와 복원
 
-기본 상태 위치는 `${XDG_STATE_HOME:-~/.local/state}/claude-worker/project-updates`다.
-`WORKER_PROJECT_UPDATE_HOME` 또는 `--state-dir`로 바꿀 수 있으며 프로젝트 내부 위치는 거절한다.
+기본 상태 위치는 `${XDG_STATE_HOME:-~/.local/state}/deepseek-worker/deepseek-project-updates`다.
+`DEEPSEEK_PROJECT_UPDATE_HOME` 또는 `--state-dir`로 바꿀 수 있으며 프로젝트 내부 위치는 거절한다.
 apply가 출력한 개별 백업 폴더는 다음과 같다.
 
 ```text

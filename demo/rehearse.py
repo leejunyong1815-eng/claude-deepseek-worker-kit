@@ -35,15 +35,15 @@ def rehearse(root):
     root.mkdir(parents=True, exist_ok=False)
     conf, mock = root / "mock-conf", root / "mock-bin"
     conf.mkdir(); mock.mkdir()
-    (conf / "env").write_text('export LLM_BASE_URL="http://127.0.0.1:9"\nexport LLM_API_KEY="none"\nexport LLM_MODEL="offline-demo-mock"\n')
+    (conf / "env").write_text('export LLM_BASE_URL="http://127.0.0.1:9"\nexport LLM_API_KEY="offline-demo-key"\nexport LLM_MODEL="offline-demo-mock"\nexport LLM_CONTEXT_WINDOW="32000"\n')
     (mock / "claude").write_text(MOCK)
     (mock / "claude").chmod(0o755)
     env = dict(os.environ, PATH=str(mock) + os.pathsep + os.environ["PATH"],
-               CLAUDE_WORKER_CONF_DIR=str(conf), DEMO_REHEARSAL_REFERENCE=str(DEMO / "reference"),
+               DEEPSEEK_WORKER_CONF_DIR=str(conf), DEMO_REHEARSAL_REFERENCE=str(DEMO / "reference"),
                PYTHONDONTWRITEBYTECODE="1", CLAUDECODE="1")
     metadata = prepare(root / "project", profile="", mode="offline-rehearsal")
     repo, state = Path(metadata["repository"]), root / "state"
-    runner = [str(KIT / "bin/worker-task"), "--state-dir", str(state)]
+    runner = [str(KIT / "bin/deepseek-task"), "--state-dir", str(state)]
     tasks = []
     for label in ("A", "B"):
         p = subprocess.run(runner + ["submit", str(repo / f"tasks/{label}.json")],

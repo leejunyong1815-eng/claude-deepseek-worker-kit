@@ -10,7 +10,7 @@ import unittest
 
 
 KIT = Path(__file__).resolve().parents[1]
-CLI = KIT / "bin/worker-task"
+CLI = KIT / "bin/deepseek-task"
 MOCK = r'''#!/usr/bin/env python3
 import json, os, subprocess, sys, time
 from pathlib import Path
@@ -22,13 +22,32 @@ assert not os.environ.get('CLAUDECODE')
 assert not os.environ.get('CLAUDE_CODE_SESSION_ID')
 assert not os.environ.get('CLAUDE_CODE_CHILD_SESSION')
 assert os.environ['ANTHROPIC_MODEL'] == 'mock-model'
+assert os.environ['CLAUDE_CODE_EFFORT_LEVEL'] == os.environ['DEEPSEEK_WORKER_EFFORT']
+assert sys.argv[sys.argv.index('--effort') + 1] == os.environ['DEEPSEEK_WORKER_EFFORT']
+assert sys.argv[sys.argv.index('--max-turns') + 1] == '120'
+assert os.environ['DEEPSEEK_WORKER_ROLE'] in sys.argv[sys.argv.index('-p') + 1]
+for tier in ('OPUS', 'SONNET', 'HAIKU', 'FABLE'):
+    assert os.environ['ANTHROPIC_DEFAULT_' + tier + '_MODEL'] == 'mock-model'
+assert os.environ['CLAUDE_CODE_SUBAGENT_MODEL'] == 'mock-model'
+assert not os.environ.get('MAX_THINKING_TOKENS')
 prompt = sys.argv[sys.argv.index('-p') + 1]
 args = json.loads(prompt.rsplit('\n\n', 1)[1])
 mode = args.get('mode', 'edit')
 if mode == 'new_module':
     Path('src/generated.py').write_text('def twice(value):\n    return value * 2\n')
-else:
+elif mode != 'candidate':
     Path('src/value.txt').write_text(args.get('value', 'worker'))
+if mode == 'candidate':
+    Path('candidate-tests').mkdir()
+    Path('candidate-tests/test_candidate.py').write_text('assert 2 + 2 == 4\n')
+if mode == 'symlink_output':
+    Path('src/link.txt').symlink_to('value.txt')
+if mode == 'input_edit':
+    next(Path('.task-inputs').rglob('value.txt')).write_text('tampered')
+if mode == 'consume':
+    data = next(Path('.task-inputs').rglob('value.txt')).read_text()
+    assert data == 'worker'
+    Path('src/review.txt').write_text('reviewed: ' + data)
 if mode == 'outside': Path('outside.txt').write_text('bad')
 if mode == 'ignored': Path('ignored.txt').write_text('bad')
 if mode == 'protected': Path('tests/check.txt').write_text('bad')
@@ -68,11 +87,11 @@ class ManagedTasks(unittest.TestCase):
         (self.mock / "claude").chmod(0o755)
         conf = self.root / "conf"
         conf.mkdir()
-        config = 'export LLM_BASE_URL=http://unused.invalid\nexport LLM_API_KEY=offline-secret-12345\nexport LLM_MODEL=mock-model\n'
+        config = 'export LLM_BASE_URL=http://unused.invalid\nexport LLM_API_KEY=offline-secret-12345\nexport LLM_MODEL=mock-model\nexport LLM_CONTEXT_WINDOW=32000\n'
         (conf / "env").write_text(config)
         (conf / "env.impl").write_text(config)
         self.env = dict(os.environ, PATH=str(self.mock) + os.pathsep + os.environ["PATH"],
-                        CLAUDE_WORKER_CONF_DIR=str(conf), PYTHONDONTWRITEBYTECODE="1")
+                        DEEPSEEK_WORKER_CONF_DIR=str(conf), PYTHONDONTWRITEBYTECODE="1")
         # Do not inherit the test runner's Git overrides.
         for key in list(self.env):
             if key.startswith("GIT_"):
@@ -151,6 +170,72 @@ class ManagedTasks(unittest.TestCase):
         p = self.call("run", task, *extra, check=False)
         self.assertEqual(p.returncode, 0 if success else 1, p.stderr + p.stdout)
         return json.loads(p.stdout)
+
+    def test_role_and_effort_recorded_and_sent_to_actual_cli(self):
+        for role in ("planner", "researcher", "implementer", "test-author", "runner", "analyst", "reviewer"):
+            state = self.run_task(self.submit(role=role, effort="max"))
+            self.assertEqual(state["role"], role)
+            self.assertEqual(state["effort"], "max")
+        state = self.run_task(self.submit(role="reviewer", effort="high"))
+        self.assertEqual(state["effort"], "high")
+
+    def test_verified_producer_inputs_are_copied_and_protected(self):
+        producer = self.submit()
+        first = self.run_task(producer)
+        consumer = self.submit("consume", role="reviewer", inputs=[{"task_id": producer, "paths": ["src/value.txt"]}])
+        result = self.run_task(consumer)
+        self.assertEqual(result["inputs"][0]["attempt_id"], first["attempt_id"])
+        copied = Path(result["worktree"]) / ".task-inputs" / producer / "src/value.txt"
+        self.assertEqual(copied.read_text(), "worker")
+        self.assertFalse(copied.is_symlink())
+        self.assertNotEqual(copied.stat().st_ino, (Path(first["worktree"]) / "src/value.txt").stat().st_ino)
+        self.assertEqual(self.status(producer)["state"], "succeeded")
+        bad = self.submit("input_edit", inputs=[{"task_id": producer, "paths": ["src/value.txt"]}], allowed_paths=["*"])
+        bad_result = self.run_task(bad, False)
+        self.assertEqual(bad_result["reason"], "path_policy_violation")
+        self.assertEqual(self.status(producer)["state"], "succeeded")
+
+    def test_stale_or_failed_producer_is_never_consumed(self):
+        producer = self.submit()
+        state = self.run_task(producer)
+        task = self.submit("consume", inputs=[{"task_id": producer, "paths": ["src/value.txt"]}])
+        (Path(state["worktree"]) / "src/value.txt").write_text("changed after success")
+        result = self.run_task(task, False)
+        self.assertEqual(result["reason"], "execution_error")
+        self.assertIsNone(result["worker_exit_code"])
+        self.assertIn("input", result["error"])
+        spec = self.root / "spec.json"
+        for source in (producer, self.submit("model_error")):
+            raw = dict(purpose="review", repository=str(self.repo), instructions="review", allowed_paths=["reports/"],
+                       verify=["true"], inputs=[{"task_id": source, "paths": ["src/value.txt"]}])
+            spec.write_text(json.dumps(raw))
+            self.assertEqual(self.call("submit", spec, check=False).returncode, 2)
+
+    def test_symlink_input_refused_even_from_successful_task(self):
+        producer = self.submit("symlink_output")
+        self.run_task(producer)
+        spec = self.root / "bad-link.json"
+        spec.write_text(json.dumps(dict(purpose="review", repository=str(self.repo), instructions="review",
+            allowed_paths=["reports/"], verify=["true"], inputs=[{"task_id": producer, "paths": ["src/link.txt"]}])))
+        self.assertEqual(self.call("submit", spec, check=False).returncode, 2)
+
+    def test_test_author_candidates_cannot_replace_acceptance_tests(self):
+        task = self.submit("candidate", role="test-author", allowed_paths=["candidate-tests/"],
+                           verify=["python3 -B candidate-tests/test_candidate.py"])
+        result = self.run_task(task)
+        self.assertEqual(result["role"], "test-author")
+        self.assertEqual((Path(result["worktree"]) / "tests/check.txt").read_text(), "base")
+        result = self.run_task(self.submit("protected", role="test-author", allowed_paths=["*"]), False)
+        self.assertEqual(result["reason"], "path_policy_violation")
+
+    def test_input_symlink_and_unsubmitted_paths_refused(self):
+        producer = self.submit()
+        self.run_task(producer)
+        for path in ("../outside", "tests/check.txt", "src/", ".git", "/absolute"):
+            spec = self.root / "bad-input.json"
+            spec.write_text(json.dumps(dict(purpose="review", repository=str(self.repo), instructions="review",
+                allowed_paths=["reports/"], verify=["true"], inputs=[{"task_id": producer, "paths": [path]}])))
+            self.assertEqual(self.call("submit", spec, check=False).returncode, 2)
 
     def test_workspaces_separate_and_original_dirty_preserved(self):
         (self.repo / "src/value.txt").write_text("staged")

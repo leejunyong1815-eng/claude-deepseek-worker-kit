@@ -12,7 +12,7 @@ Do not replace local LLM workers with Claude Agent/Workflow agents.
   commands, GPU jobs, QPU calls, server configuration changes or new packages.
 - The inference server is separate: reuse the configured local LLM profile from
   the two specs. Do not change model routes, context windows or API credentials.
-- Use the runner path in demo.json, or the installed worker-task CLI. Register
+- Use the runner path in demo.json, or the installed deepseek-task CLI. Register
   tasks/A.json and tasks/B.json. Record the two returned IDs. Run each from a
   separate managed worktree, at most two concurrent executions. A shell job or
   Bash background task may be used; collect real process exit codes.
@@ -24,7 +24,7 @@ Do not replace local LLM workers with Claude Agent/Workflow agents.
 
 ## Independent completion and presentation
 
-Use worker-task status/result for both IDs. Require succeeded, verification_valid,
+Use deepseek-task status/result for both IDs. Require succeeded, verification_valid,
 artifacts_complete and zero verification exit codes. Worker reports alone do not count.
 If a task fails, inspect its logs, preserve it, and explicitly retry at most once.
 If it still fails, stop that part and report incomplete coverage; do not quietly

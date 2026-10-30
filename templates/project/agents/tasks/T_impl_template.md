@@ -2,7 +2,9 @@
 - 관리 task ID / attempt ID: <등록/실행 후 기록>
 - 저장소 / 기준 커밋: <절대 경로> / <커밋 해시>
 - 작업 공간: <실행기가 준비한 worktree; checkout·add·commit 금지>
-- 역할: IMPLEMENTER   워커: @llm-worker-impl (없으면 @llm-worker)
+- role / effort: implementer / max (요청값)
+- profile: <기본은 빈 문자열; 설치된 연결 프로필>
+- inputs: <검증된 선행 task ID와 읽을 정확한 변경 파일 경로; 없으면 []>
 - 예산: <N> 분, 편집 파일 ≤ <M> 개
 - 실행 제한 / 검증 제한: <초> / <명령당 초>
 - 허용 경로 / 보호 경로: <목록> / <테스트·설정·검증 파일 목록>
@@ -51,4 +53,4 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider tests/test_<�
 
 ## 보고
 HANDOFF_TEMPLATE.md 형식. 기준 커밋 대비 변경 파일(미추적 포함), 명령·종료 코드·로그 경로를 포함한다.
-최종 판정은 워커 보고가 아니라 `worker-task result <ID>`의 외부 검증 결과로 한다. 실패 시도도 보존한다.
+최종 판정은 워커 보고가 아니라 `deepseek-task result <ID>`의 외부 검증 결과로 한다. 실패 시도도 보존한다.

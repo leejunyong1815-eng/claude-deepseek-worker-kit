@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+"""Explicit lab API integration check. Sends model requests unless --models is used."""
+import argparse
+import json
+import os
+from pathlib import Path
+import shlex
+import sys
+import urllib.error
+import urllib.request
+
+
+def config(profile):
+    root = Path(os.environ.get('DEEPSEEK_WORKER_CONF_DIR', '~/.config/deepseek-worker')).expanduser()
+    if profile and not all(c.isalnum() or c in '_-' for c in profile):
+        raise ValueError('invalid profile')
+    values = {}
+    for line in (root / ('env' + ('.' + profile if profile else ''))).read_text().splitlines():
+        name, sep, text = line.removeprefix('export ').partition('=')
+        if sep:
+            tokens = shlex.split(text, comments=True)
+            values[name.strip()] = tokens[0] if tokens else ''
+    for name in ('LLM_BASE_URL', 'LLM_API_KEY', 'LLM_MODEL'):
+        if not values.get(name) or 'CHANGE_ME' in values[name]:
+            raise ValueError('unconfigured lab backend: ' + name)
+    return values
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        raise ValueError('redirect refused; configure the exact lab endpoint')
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument('-P', '--profile', default='')
+    p.add_argument('--models', action='store_true', help='only list model IDs; no generation requests')
+    args = p.parse_args()
+    settings = config(args.profile)
+    key = settings['LLM_API_KEY']
+    opener = urllib.request.build_opener(NoRedirect)
+
+    def request(path, body=None, stream=False):
+        headers = {'content-type': 'application/json', 'anthropic-version': '2023-06-01',
+                   'Authorization': 'Bearer ' + key, 'x-api-key': key}
+        data = json.dumps(body).encode() if body is not None else None
+        req = urllib.request.Request(settings['LLM_BASE_URL'].rstrip('/') + path, data=data, headers=headers)
+        with opener.open(req, timeout=60) as response:
+            raw = response.read(4 * 1024 * 1024)
+        return raw.decode() if stream else json.loads(raw)
+
+    if args.models:
+        data = request('/v1/models')
+        print(json.dumps([m['id'] for m in data.get('data', [])]))
+        return 0
+    print('Explicit API check: text, SSE, thinking/effort and tool-result continuation.')
+    common = dict(model=settings['LLM_MODEL'], max_tokens=8192,
+                  thinking={'type': 'enabled', 'budget_tokens': 4096},
+                  output_config={'effort': settings.get('LLM_EFFORT', 'max')})
+    messages = [{'role': 'user', 'content': 'Use get_time for Asia/Seoul, then report its result.'}]
+    tools = [dict(name='get_time', description='Get current time', input_schema={
+        'type': 'object', 'properties': {'tz': {'type': 'string'}}, 'required': ['tz']})]
+    result = request('/v1/messages', dict(common, messages=messages, tools=tools))
+    if result.get('type') != 'message':
+        raise ValueError('expected Anthropic message envelope')
+    blocks = result.get('content', [])
+    calls = [b for b in blocks if b.get('type') == 'tool_use']
+    if not calls:
+        raise ValueError('no tool_use block returned')
+    print('tool_use: received; thinking block observed:', any(b.get('type') == 'thinking' for b in blocks))
+    # Preserve the complete assistant content, including thinking/signature blocks.
+    messages += [{'role': 'assistant', 'content': blocks}, {'role': 'user', 'content': [
+        {'type': 'tool_result', 'tool_use_id': b['id'], 'content': '12:00 Asia/Seoul'} for b in calls]}]
+    result = request('/v1/messages', dict(common, messages=messages, tools=tools))
+    if result.get('type') != 'message' or result.get('stop_reason') != 'end_turn':
+        raise ValueError('tool continuation did not complete')
+    raw = request('/v1/messages', dict(common, stream=True, messages=[{'role': 'user', 'content': 'Say PONG.'}]), True)
+    if 'event: message_start' not in raw or 'event: message_stop' not in raw:
+        raise ValueError('incomplete SSE stream')
+    print('API checks passed. Effort field acceptance does not prove the server honored max reasoning.')
+    print('Next: run a small managed task to check the actual Claude CLI and local permissions.')
+    return 0
+
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main())
+    except (ValueError, OSError, KeyError, urllib.error.URLError):
+        # Do not dump server bodies/headers; gateways can echo submitted credentials.
+        print('deepseek-probe: compatibility check failed; check endpoint, model, permissions and server logs.', file=sys.stderr)
+        sys.exit(1)

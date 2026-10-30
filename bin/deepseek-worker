@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# deepseek-worker — 로컬 LLM 서버에 연결된 Claude Code 워커 세션.
+# 사용: deepseek-worker [-P 프로필] [claude 인자...]
+#   설정: ~/.config/deepseek-worker/env            (기본 프로필)
+#         ~/.config/deepseek-worker/env.<프로필>    (-P <프로필>, 예: -P review)
+#   install.sh 가 생성한다. 프로필마다 다른 서버·모델·워커 이름을 둘 수 있다.
+set -euo pipefail
+
+CONF_DIR="${DEEPSEEK_WORKER_CONF_DIR:-$HOME/.config/deepseek-worker}"
+PROFILE="${DEEPSEEK_WORKER_PROFILE:-}"
+if [ "${1:-}" = "-P" ] || [ "${1:-}" = "--profile" ]; then
+    [ -n "${2:-}" ] || { echo "deepseek-worker: -P 다음에 프로필 이름이 필요합니다" >&2; exit 2; }
+    PROFILE="$2"; shift 2
+fi
+[[ -z "$PROFILE" || "$PROFILE" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "invalid profile" >&2; exit 2; }
+ENV_FILE="$CONF_DIR/env${PROFILE:+.$PROFILE}"
+PROMPT_FILE="$CONF_DIR/worker${PROFILE:+.$PROFILE}.md"
+
+if [ ! -f "$ENV_FILE" ]; then
+    echo "deepseek-worker: 설정 파일이 없습니다: $ENV_FILE" >&2
+    if [ -n "$PROFILE" ]; then echo "  install.sh --profile $PROFILE 로 만드세요." >&2
+    else echo "  install.sh 를 먼저 실행하세요." >&2; fi
+    exit 2
+fi
+# shellcheck disable=SC1090
+source "$ENV_FILE"
+
+: "${LLM_BASE_URL:?LLM_BASE_URL 이 비어 있습니다 ($ENV_FILE)}"
+: "${LLM_API_KEY:?LLM_API_KEY 가 비어 있습니다 ($ENV_FILE)}"
+: "${LLM_MODEL:?LLM_MODEL 이 비어 있습니다 ($ENV_FILE)}"
+: "${LLM_CONTEXT_WINDOW:?LLM_CONTEXT_WINDOW is required}"
+[[ "$LLM_CONTEXT_WINDOW" =~ ^[1-9][0-9]*$ ]] || { echo 'invalid context limit' >&2; exit 2; }
+for value in "$LLM_BASE_URL" "$LLM_API_KEY" "$LLM_MODEL"; do
+    [[ "$value" != *CHANGE_ME* && "$value" != none && "$value" != dummy ]] || { echo 'lab backend is unconfigured' >&2; exit 2; }
+done
+EFFORT="${DEEPSEEK_WORKER_EFFORT:-${LLM_EFFORT:-max}}"
+case "$EFFORT" in low|high|max) ;; *) echo 'invalid reasoning effort' >&2; exit 2;; esac
+ROLE="${DEEPSEEK_WORKER_ROLE:-${WORKER_ROLE:-implementer}}"
+[ "$ROLE" != impl ] || ROLE=implementer
+[ -n "$ROLE" ] || ROLE=implementer
+case "$ROLE" in planner|researcher|implementer|test-author|runner|analyst|reviewer) ;; *) echo 'invalid worker role' >&2; exit 2;; esac
+# Managed specs are immutable; prevent trailing CLI arguments overriding routing/effort.
+if [ "${DEEPSEEK_TASK_MANAGED:-0}" = 1 ]; then
+    for arg in "$@"; do
+        case "$arg" in --effort|--effort=*|--model|--model=*) echo 'managed model/effort override refused' >&2; exit 2;; esac
+    done
+fi
+# 셸의 DEEPSEEK_WORKER_NAME 이 설정 파일의 WORKER_NAME 보다 우선한다 (워커를 여러 개 띄울 때).
+WORKER_NAME="${DEEPSEEK_WORKER_NAME:-${WORKER_NAME:-deepseek-worker${PROFILE:+-$PROFILE}}}"
+
+case "$LLM_BASE_URL" in
+    */v1|*/v1/) echo "deepseek-worker: LLM_BASE_URL 끝의 /v1 을 떼세요 (Claude Code 가 /v1/messages 를 붙입니다): $LLM_BASE_URL" >&2; exit 2 ;;
+esac
+
+ROLE_FILE="$CONF_DIR/roles/role-$ROLE.md"
+if [ ! -f "$ROLE_FILE" ]; then
+    KIT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+    ROLE_FILE="$KIT/prompts/role-$ROLE.md.tmpl"
+fi
+[ -f "$ROLE_FILE" ] || { echo 'role prompt missing; run install.sh --update/--render' >&2; exit 2; }
+BASE_PROMPT=""
+[ ! -f "$PROMPT_FILE" ] || BASE_PROMPT="$(cat "$PROMPT_FILE")"
+APPEND=(--append-system-prompt "$BASE_PROMPT
+$(cat "$ROLE_FILE")")
+
+# 모든 모델 계층(opus/sonnet/haiku/fable, 서브에이전트)을 같은 로컬 모델로 묶는다.
+# 그래야 제목 생성 등 백그라운드 호출이 서버가 모르는 모델명으로 나가지 않는다.
+exec env \
+  -u ANTHROPIC_API_KEY \
+  -u CLAUDE_CODE_USE_BEDROCK \
+  -u CLAUDE_CODE_USE_VERTEX \
+  -u CLAUDE_CODE_USE_FOUNDRY \
+  -u MAX_THINKING_TOKENS \
+  -u ANTHROPIC_SMALL_FAST_MODEL \
+  -u CLAUDE_CODE_AUTO_COMPACT_WINDOW \
+  ANTHROPIC_BASE_URL="$LLM_BASE_URL" \
+  ANTHROPIC_AUTH_TOKEN="$LLM_API_KEY" \
+  ANTHROPIC_MODEL="$LLM_MODEL" \
+  ANTHROPIC_DEFAULT_OPUS_MODEL="$LLM_MODEL" \
+  ANTHROPIC_DEFAULT_SONNET_MODEL="$LLM_MODEL" \
+  ANTHROPIC_DEFAULT_HAIKU_MODEL="$LLM_MODEL" \
+  ANTHROPIC_DEFAULT_FABLE_MODEL="$LLM_MODEL" \
+  CLAUDE_CODE_SUBAGENT_MODEL="$LLM_MODEL" \
+  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
+  CLAUDE_CODE_EFFORT_LEVEL="$EFFORT" \
+  CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS="${LLM_DISABLE_BETAS:-1}" \
+  DISABLE_PROMPT_CACHING="${LLM_DISABLE_PROMPT_CACHING:-0}" \
+  ${LLM_CONTEXT_WINDOW:+CLAUDE_CODE_MAX_CONTEXT_TOKENS="$LLM_CONTEXT_WINDOW"} \
+  ${LLM_CAPABILITIES:+ANTHROPIC_DEFAULT_OPUS_MODEL_SUPPORTED_CAPABILITIES="$LLM_CAPABILITIES"} \
+  ${LLM_CAPABILITIES:+ANTHROPIC_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES="$LLM_CAPABILITIES"} \
+  ${LLM_CAPABILITIES:+ANTHROPIC_DEFAULT_HAIKU_MODEL_SUPPORTED_CAPABILITIES="$LLM_CAPABILITIES"} \
+  ${LLM_CAPABILITIES:+ANTHROPIC_DEFAULT_FABLE_MODEL_SUPPORTED_CAPABILITIES="$LLM_CAPABILITIES"} \
+  ANTHROPIC_DEFAULT_OPUS_MODEL_NAME="$LLM_MODEL (local)" \
+  claude \
+    --model "$LLM_MODEL" \
+    --effort "$EFFORT" \
+    --name "$WORKER_NAME" \
+    --settings '{"crossSessionInbound":"accept"}' \
+    "${APPEND[@]}" \
+    "$@"

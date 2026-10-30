@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Opt-in task runner for the existing claude-worker CLI (stdlib only)."""
+"""Opt-in task runner for the existing deepseek-worker CLI (stdlib only)."""
 import argparse
 import codecs
 import contextlib
@@ -12,6 +12,7 @@ from pathlib import Path
 import re
 import selectors
 import shlex
+import shutil
 import signal
 import stat
 import subprocess
@@ -21,7 +22,8 @@ import uuid
 
 
 ACTIVE = {"running", "verifying"}
-DEFAULT_PROTECTED = ["tests/", "config/", ".claude/", ".git"]
+DEFAULT_PROTECTED = ["tests/", "config/", ".claude/", ".git", ".task-inputs/"]
+ROLES = {"planner", "researcher", "implementer", "test-author", "runner", "analyst", "reviewer"}
 
 
 def now():
@@ -154,7 +156,7 @@ def stop_group(who):
 def secrets_for(profile):
     values = [os.environ.get(k, "") for k in
               ("LLM_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")]
-    conf = Path(os.environ.get("CLAUDE_WORKER_CONF_DIR", Path.home() / ".config/claude-worker"))
+    conf = Path(os.environ.get("DEEPSEEK_WORKER_CONF_DIR", Path.home() / ".config/deepseek-worker"))
     path = conf / ("env" + ("." + profile if profile else ""))
     if path.is_file():
         for line in path.read_text().splitlines():
@@ -265,6 +267,10 @@ class Tasks:
         profile = raw.get("profile", "")
         if not isinstance(profile, str) or (profile and not re.fullmatch(r"[A-Za-z0-9_-]+", profile)):
             raise ValueError("invalid profile")
+        role = raw.get("role", "implementer")
+        effort = raw.get("effort", "max")
+        if not isinstance(role, str) or not isinstance(effort, str) or role not in ROLES or effort not in {"low", "high", "max"}:
+            raise ValueError("invalid role or effort")
         allowed = rules(raw.get("allowed_paths", []), "allowed_paths")
         if not allowed:
             raise ValueError("allowed_paths must not be empty")
@@ -273,7 +279,7 @@ class Tasks:
         verify = raw.get("verify", [])
         if not isinstance(verify, list) or not verify or not all(isinstance(c, str) and c.strip() for c in verify):
             raise ValueError("verify must contain explicit shell commands")
-        limits = [raw.get("timeout", 1200), raw.get("verify_timeout", 120)]
+        limits = [raw.get("timeout", 1800), raw.get("verify_timeout", 300)]
         if not all(isinstance(x, (int, float)) and not isinstance(x, bool) and 0 < x <= 86400 for x in limits):
             raise ValueError("timeout and verify_timeout must be in (0, 86400] seconds")
         depends = raw.get("depends_on_uncommitted", False)
@@ -283,9 +289,48 @@ class Tasks:
         if backend != "local":
             raise ValueError("managed tasks currently support only compute_backend=local (current computer/WSL)")
         spec = dict(purpose=purpose, instructions=instructions, repository=str(repo), base_commit=base,
-                    profile=profile, references=refs, allowed_paths=allowed, protected_paths=protected,
+                    profile=profile, role=role, effort=effort, references=refs, allowed_paths=allowed, protected_paths=protected,
                     verify=verify, timeout=limits[0], verify_timeout=limits[1], depends_on_uncommitted=depends,
                     compute_backend=backend)
+        inputs = raw.get("inputs", [])
+        if not isinstance(inputs, list):
+            raise ValueError("inputs must be a list of {task_id, paths}")
+        # Pin actual verified producer content, not its natural-language report.
+        spec["inputs"] = []
+        seen = set()
+        for item in inputs:
+            if not isinstance(item, dict):
+                raise ValueError("input must contain task_id and exact relative file paths")
+            source_id = item.get("task_id", "")
+            if not isinstance(source_id, str):
+                raise ValueError("input task_id must be a string")
+            if source_id in seen:
+                raise ValueError("duplicate input task")
+            seen.add(source_id)
+            source = self.get(source_id)
+            if source["state"] != "succeeded" or not source.get("verification_valid"):
+                raise ValueError("input task is not currently verified: " + source_id)
+            source_spec = read_json(self.path(source_id) / "spec.json")
+            if source_spec["repository"] != str(repo) or source_spec["base_commit"] != base:
+                raise ValueError("input must use the same repository and base commit")
+            paths = rules(item.get("paths", []), "input paths")
+            if not paths or len(paths) != len(set(paths)):
+                raise ValueError("input paths must be unique exact file paths")
+            changed = {c["path"] for c in source["changed_files"] if c["change"] != "deleted"}
+            tree = snapshot(Path(source["worktree"]))
+            if digest(tree) != source["verified_digest"]:
+                raise ValueError("input changed after verification")
+            files = {}
+            for path in paths:
+                if path not in changed or path not in tree or tree[path][0] != "file":
+                    raise ValueError("input must name a changed regular file: " + path)
+                # A symlink parent could point outside the producing worktree.
+                candidate = Path(source["worktree"]) / path
+                if candidate.resolve() != candidate:
+                    raise ValueError("symlink input refused")
+                files[path] = tree[path]
+            spec["inputs"].append(dict(task_id=source_id, attempt_id=source["attempt_id"],
+                                       verified_digest=source["verified_digest"], files=files))
         serialized = json.dumps(spec)
         if redact(serialized, secrets_for(profile)) != serialized:
             raise ValueError("task specification contains a configured API key; remove it")
@@ -299,11 +344,33 @@ class Tasks:
         atomic_json(folder / "state.json", dict(task_id=task, state="queued", reason=
                     "uncommitted_dependency" if has_dirty and depends else None,
                     created_at=now(), attempts=[], current_attempt=None, base_commit=base,
-                    profile=profile, original_dirty_at_submit=has_dirty,
+                    profile=profile, role=role, effort=effort, inputs=spec["inputs"], original_dirty_at_submit=has_dirty,
                     uncommitted_changes_included=False, spec_digest=digest(spec)))
         if has_dirty:
             print("Original checkout is dirty. Only the recorded base commit is included; uncommitted changes are excluded.", file=sys.stderr)
         return task
+
+    def prepare_inputs(self, spec, wt):
+        """Copy pinned producer files without touching either producer or source checkout."""
+        if (wt / ".task-inputs").exists() or (wt / ".task-inputs").is_symlink():
+            raise ValueError("reserved .task-inputs path exists in base commit")
+        for item in spec.get("inputs", []):
+            source = self.get(item["task_id"])
+            if (source["state"] != "succeeded" or not source.get("verification_valid") or
+                source["attempt_id"] != item["attempt_id"] or source["verified_digest"] != item["verified_digest"]):
+                raise ValueError("input no longer matches pinned verified attempt: " + item["task_id"])
+            source_root = Path(source["worktree"])
+            destination = wt / ".task-inputs" / item["task_id"]
+            for path in item["files"]:
+                src = source_root / path
+                if src.resolve() != src or not src.is_file():
+                    raise ValueError("input file missing or symlink")
+                target = destination / path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(src, target)
+                target.chmod(item["files"][path][1])
+            if snapshot(destination) != item["files"] or digest(snapshot(source_root)) != item["verified_digest"]:
+                raise ValueError("input changed during transfer")
 
     def get(self, task):
         folder = self.path(task)
@@ -355,6 +422,7 @@ class Tasks:
                          attempts=old["attempts"] + [attempt], state="running", reason=None,
                          base_commit=spec["base_commit"], profile=spec["profile"], worktree=str(wt),
                          compute_backend=spec.get("compute_backend", "local"),
+                         role=spec["role"], effort=spec["effort"], inputs=spec.get("inputs", []),
                          worker_name=f"task-{task[-12:]}-{attempt}",
                          original_dirty_at_submit=old["original_dirty_at_submit"],
                          original_dirty_at_run=dirty(spec["repository"]), uncommitted_changes_included=False,
@@ -393,9 +461,11 @@ class Tasks:
             env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
             env["PYTHONDONTWRITEBYTECODE"] = "1"
             env["CLAUDE_PROJECT_DIR"] = str(wt)
-            env["CLAUDE_WORKER_PROFILE"] = spec["profile"]
-            env["CLAUDE_WORKER_NAME"] = state["worker_name"]
-            env["WORKER_TASK_MANAGED"] = "1"
+            env["DEEPSEEK_WORKER_PROFILE"] = spec["profile"]
+            env["DEEPSEEK_WORKER_NAME"] = state["worker_name"]
+            env["DEEPSEEK_WORKER_ROLE"] = spec["role"]
+            env["DEEPSEEK_WORKER_EFFORT"] = spec["effort"]
+            env["DEEPSEEK_TASK_MANAGED"] = "1"
             # This is a separate CLI session in its own worktree, not the parent
             # Claude session. Keep permissions/config; drop only session identity.
             for name in ("CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_CHILD_SESSION"):
@@ -471,12 +541,13 @@ class Tasks:
             staged = git(wt, "ls-files", "--stage")
             if staged.startswith(b"160000 ") or b"\n160000 " in staged:
                 raise ValueError("managed mode does not support submodules yet")
+            self.prepare_inputs(spec, wt)
             baseline = snapshot(wt)
             atomic_json(output / "baseline.json", baseline)
             missing = [p for p in spec["references"] if not any(matches(f, [p]) for f in baseline)]
             if missing:
                 raise ValueError("reference absent from base commit (possibly uncommitted): " + ", ".join(missing))
-            prompt = (f"Managed task {task}, attempt {attempt}. Purpose: {spec['purpose']}\n"
+            prompt = (f"Managed task {task}, attempt {attempt}. Role: {spec['role']}. Requested effort: {spec['effort']}. Purpose: {spec['purpose']}\n"
                       "Compute backend: local (this computer, often WSL). Run the assigned implementation and tests locally. "
                       "The LLM inference server is not the compute backend. Do not use SSH or remote-* for this task.\n"
                       f"Your assigned worktree is {wt}, detached at {spec['base_commit']}. "
@@ -485,10 +556,11 @@ class Tasks:
                       f"Read references: {json.dumps(spec['references'])}\n"
                       f"Allowed paths: {json.dumps(spec['allowed_paths'])}\n"
                       f"Protected paths: {json.dumps(spec['protected_paths'])}\n"
+                      f"Immutable inputs under .task-inputs/<task_id>/: {json.dumps(spec.get('inputs', []))}\n"
                       f"Verification: {json.dumps(spec['verify'])}\n\n{spec['instructions']}")
-            worker = str(Path(__file__).resolve().with_name("claude-worker"))
+            worker = str(Path(__file__).resolve().with_name("deepseek-worker"))
             command = [worker] + (["-P", spec["profile"]] if spec["profile"] else [])
-            command += ["-p", prompt, "--output-format", "json", "--max-turns", "60"]
+            command += ["-p", prompt, "--output-format", "json", "--max-turns", "120"]
             rc, timed_out = execute(command, spec["timeout"], output / "worker.stdout.log", output / "worker.stderr.log")
             update(worker_exit_code=rc, worker_timed_out=timed_out)
             if cancelled():
@@ -547,8 +619,8 @@ class Tasks:
 def main():
     os.umask(0o077)
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--state-dir", type=Path, default=Path(os.environ.get("WORKER_TASK_HOME",
-                        str(Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state"))) / "claude-worker/tasks"))))
+    parser.add_argument("--state-dir", type=Path, default=Path(os.environ.get("DEEPSEEK_TASK_HOME",
+                        str(Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state"))) / "deepseek-worker/tasks"))))
     sub = parser.add_subparsers(dest="command", required=True)
     submit = sub.add_parser("submit", help="register an immutable JSON task spec; print its ID")
     submit.add_argument("spec", type=Path)
@@ -573,7 +645,7 @@ def main():
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return int(args.command == "run" and result["state"] != "succeeded")
     except (ValueError, OSError, KeyError) as exc:
-        print("worker-task: " + str(exc), file=sys.stderr)
+        print("deepseek-task: " + str(exc), file=sys.stderr)
         return 2
 
 

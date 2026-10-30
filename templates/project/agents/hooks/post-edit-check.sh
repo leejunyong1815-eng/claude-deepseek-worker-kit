@@ -25,7 +25,7 @@ TAIL_LINES="${TAIL_LINES:-40}"
 LOG="$ROOT/agents/hooks/last-check.log"
 # Managed mode already collects process logs outside the worktree. Do not create
 # an ignored but out-of-policy log alongside the source or persist raw secrets.
-[ "${WORKER_TASK_MANAGED:-0}" = 1 ] && LOG=/dev/null
+[ "${DEEPSEEK_TASK_MANAGED:-0}" = 1 ] && LOG=/dev/null
 
 fail=0; out=""
 case "$FILE" in

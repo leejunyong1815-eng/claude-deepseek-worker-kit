@@ -18,17 +18,17 @@ def sha(data):
 
 
 def find_kit():
-    explicit = os.environ.get("CLAUDE_WORKER_KIT")
-    conf = Path(os.environ.get("CLAUDE_WORKER_CONF_DIR", Path.home() / ".config/claude-worker"))
+    explicit = os.environ.get("DEEPSEEK_WORKER_KIT")
+    conf = Path(os.environ.get("DEEPSEEK_WORKER_CONF_DIR", Path.home() / ".config/deepseek-worker"))
     candidates = [Path(explicit)] if explicit else []
     if not explicit:
         if (conf / "kit_dir").is_file():
             candidates.append(Path((conf / "kit_dir").read_text().strip()))
-        candidates += [Path(__file__).resolve().parent.parent, Path.home() / "claude-local-worker-kit"]
+        candidates += [Path(__file__).resolve().parent.parent, Path.home() / "claude-deepseek-worker-kit"]
     for path in candidates:
         if (path / "templates/project").is_dir():
             return path.resolve()
-    raise ValueError("kit not found; set CLAUDE_WORKER_KIT to the source checkout")
+    raise ValueError("kit not found; set DEEPSEEK_WORKER_KIT to the source checkout")
 
 
 def git(kit, *args):
@@ -168,8 +168,8 @@ def main():
     mode.add_argument("--apply", action="store_true", help="backup and update only unchanged known templates")
     parser.add_argument("project", nargs="?", type=Path, default=Path.cwd())
     parser.add_argument("--json", action="store_true", help="print metadata only as JSON")
-    parser.add_argument("--state-dir", type=Path, default=Path(os.environ.get("WORKER_PROJECT_UPDATE_HOME",
-        str(Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state"))) / "claude-worker/project-updates"))))
+    parser.add_argument("--state-dir", type=Path, default=Path(os.environ.get("DEEPSEEK_PROJECT_UPDATE_HOME",
+        str(Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state"))) / "deepseek-worker/deepseek-project-updates"))))
     args = parser.parse_args()
     try:
         project = args.project.expanduser().resolve()
@@ -182,12 +182,12 @@ def main():
             report = dict(project=str(project), kit=str(kit), mode="check", backup_dir=None,
                           files=public(plan(kit, project)))
     except (OSError, ValueError) as exc:
-        print("project-update: " + str(exc), file=sys.stderr)
+        print("deepseek-project-update: " + str(exc), file=sys.stderr)
         return 2
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:
-        print(f"project-update ({report['mode']}): {project}")
+        print(f"deepseek-project-update ({report['mode']}): {project}")
         for entry in report["files"]:
             print(f"  {entry['status']:8} {entry['path']}")
         if report["backup_dir"]:

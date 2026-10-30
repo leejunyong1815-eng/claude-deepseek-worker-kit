@@ -30,14 +30,14 @@ def prepare(workspace, profile=None, mode="live"):
     if mode not in {"live", "offline-rehearsal"}:
         raise ValueError("invalid run mode")
     if profile is None:
-        conf = Path(os.environ.get("CLAUDE_WORKER_CONF_DIR", Path.home() / ".config/claude-worker"))
+        conf = Path(os.environ.get("DEEPSEEK_WORKER_CONF_DIR", Path.home() / ".config/deepseek-worker"))
         profile = "impl" if (conf / "env.impl").is_file() else ""
     if profile and (not profile.isascii() or not all(c.isalnum() or c in "_-" for c in profile)):
         raise ValueError("invalid profile")
     run_id = uuid.uuid4().hex[:12]
     shutil.copytree(DEMO / "fixture", workspace, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache"))
-    env = dict(os.environ, CLAUDE_WORKER_KIT=str(KIT))
-    subprocess.run([str(KIT / "bin/project-init"), str(workspace)], env=env, check=True,
+    env = dict(os.environ, DEEPSEEK_WORKER_KIT=str(KIT))
+    subprocess.run([str(KIT / "bin/deepseek-project-init"), str(workspace)], env=env, check=True,
                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     for name in ("PROMPT.md", "DEMO_ORCHESTRATOR.md"):
         shutil.copyfile(DEMO / name, workspace / name)
@@ -45,7 +45,7 @@ def prepare(workspace, profile=None, mode="live"):
     tools.mkdir()
     shutil.copyfile(DEMO / "finish.py", tools / "finish.py")
     metadata = dict(run_id=run_id, mode=mode, compute_backend="local", device="cpu",
-                    repository=str(workspace), runner=str(KIT / "bin/worker-task"), profile=profile,
+                    repository=str(workspace), runner=str(KIT / "bin/deepseek-task"), profile=profile,
                     scientific_scope="synthetic demonstration; not a QCFD reproduction benchmark")
     (workspace / "demo.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n")
     tasks = workspace / "tasks"
@@ -53,7 +53,7 @@ def prepare(workspace, profile=None, mode="live"):
     for task, module, test in (("A", "precondition", "test_precondition.py"), ("B", "readout", "test_readout.py")):
         relative = f"src/labdemo/{module}.py"
         spec = dict(purpose=f"Lab demo {run_id}: task {task} ({module})", repository=str(workspace),
-                    base_commit="HEAD", profile=profile, compute_backend="local",
+                    base_commit="HEAD", profile=profile, role="implementer", effort="max", compute_backend="local",
                     instructions=f"Implement only {relative} according to its docstring. Run the exact verify command. "
                     "Use this worktree's local CPU only (WSL is expected). Do not use SSH, remote-* or GPUs. "
                     "Do not edit tests, tools, configs or other source modules. Leave code uncommitted. "
@@ -61,7 +61,7 @@ def prepare(workspace, profile=None, mode="live"):
                     references=[relative, f"tests/{test}"], allowed_paths=[relative],
                     protected_paths=["tests/", "tools/", "data/", "tasks/", "demo.json", "DEMO_ORCHESTRATOR.md"],
                     verify=[f"python3 -B -m unittest discover -s tests -p {test} -v"],
-                    timeout=240, verify_timeout=30, depends_on_uncommitted=False)
+                    timeout=600, verify_timeout=30, depends_on_uncommitted=False)
         (tasks / f"{task}.json").write_text(json.dumps(spec, ensure_ascii=False, indent=2) + "\n")
     readme = """# Lab demo workspace
 
@@ -90,7 +90,7 @@ conditioning and probability-distribution fidelity must be labeled as such.
     start = ("#!/usr/bin/env bash\nset -euo pipefail\n"
              'cd "$(dirname "$(readlink -f "$0")")"\n'
              f'export ORCHESTRATOR_NAME="lab-demo-{run_id}"\n'
-             f"exec {shlex.quote(str(KIT / 'bin/claude-main'))} "
+             f"exec {shlex.quote(str(KIT / 'bin/deepseek-main'))} "
              '--model "${DEMO_ORCHESTRATOR_MODEL:-claude-fable-5-1}" --effort high '
              '--append-system-prompt "$(cat DEMO_ORCHESTRATOR.md)" "$@"\n')
     (workspace / "start.sh").write_text(start)

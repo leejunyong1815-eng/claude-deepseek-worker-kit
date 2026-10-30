@@ -1,18 +1,18 @@
-# 관리형 구현 태스크 (1차)
+# 관리형 DeepSeek 태스크
 
 이 문서는 오케스트레이터가 사용하는 CLI와 사용자가 직접 상태를 조사하는 방법을 설명한다.
 일반적인 시작은 [작은 기능 하나 구현해 보기](FIRST_RUN.md)다. 사용자는 기능과 완료 조건을 요청하고,
 아래 명세 작성·등록·실행·결과 확인은 운영 규칙을 읽은 오케스트레이터가 수행할 수 있다.
 
-`claude-main`, `claude-worker`, `claude-duo`와 `Ask @이름 to …`는 그대로 쓴다.
+`deepseek-main`, `deepseek-worker`, `deepseek-duo`와 `Ask @이름 to …`는 그대로 쓴다.
 수동 메시징은 질문·조사·작은 실행에 적합하다. 수동 세션에는 이 문서의 자동 격리·상태·검증이 적용되지 않는다.
-**코드를 수정하는 위임에는 `worker-task` 관리 모드**를 권장한다. 별도 서버 없이 기존 `claude-worker`를
+**코드를 수정하는 위임에는 `deepseek-task` 관리 모드**를 권장한다. 별도 서버 없이 기존 `deepseek-worker`를
 새 프로세스로 실행하며, 이미 떠 있는 대화형 워커에 내부 소켓 메시지를 보내지 않는다.
 
 ## 등록 → 실행 → 확인
 
 설치/업데이트: 현재 키트에서 `./install.sh` (기존 설정을 유지할 수 있다).
-대화형 워커나 `claude-duo`를 미리 띄울 필요는 없다. 관리 명령이 기존 `claude-worker`를 새로 실행한다.
+대화형 워커나 `deepseek-duo`를 미리 띄울 필요는 없다. 관리 명령이 기존 `deepseek-worker`를 새로 실행한다.
 
 코드가 있는 Git 저장소로 이동하고 [명세 예시](../config/task.example.json)를 복사한다.
 예시의 목적·파일·검증 명령을 실제 프로젝트에 맞게 편집한다. `repository: "."`은 등록 명령을 실행하는
@@ -20,8 +20,8 @@
 
 ```bash
 cd ~/my-project
-cp ~/claude-local-worker-kit/config/task.example.json /tmp/worker-task.json
-# /tmp/worker-task.json을 편집한 다음 아래 명령으로 등록한다.
+cp ~/claude-deepseek-worker-kit/config/task.example.json /tmp/deepseek-task.json
+# /tmp/deepseek-task.json을 편집한 다음 아래 명령으로 등록한다.
 ```
 
 명세의 구조는 다음과 같다.
@@ -32,6 +32,9 @@ cp ~/claude-local-worker-kit/config/task.example.json /tmp/worker-task.json
   "repository": ".",
   "base_commit": "HEAD",
   "profile": "",
+  "role": "implementer",
+  "effort": "max",
+  "inputs": [],
   "compute_backend": "local",
   "instructions": "src/durations.py의 parse를 구현한다. 공개 시그니처와 테스트는 바꾸지 않는다. 테스트는 verify에 적힌 캐시 없는 명령으로 실행한다.",
   "references": ["src/durations.py", "tests/test_durations.py"],
@@ -45,15 +48,15 @@ cp ~/claude-local-worker-kit/config/task.example.json /tmp/worker-task.json
 ```
 
 ```bash
-TASK=$(worker-task submit /tmp/worker-task.json)  # stdout에는 ID 하나만
-worker-task run "$TASK"                         # 전경 실행; 종료까지 기다림
-worker-task status "$TASK"                      # 상태·이유·시도·프로세스
-worker-task result "$TASK"                      # 검증·변경 파일·로그·diff 경로
+TASK=$(deepseek-task submit /tmp/deepseek-task.json)  # stdout에는 ID 하나만
+deepseek-task run "$TASK"                         # 전경 실행; 종료까지 기다림
+deepseek-task status "$TASK"                      # 상태·이유·시도·프로세스
+deepseek-task result "$TASK"                      # 검증·변경 파일·로그·diff 경로
 ```
 
 `profile: ""`이면 기본 프로필, `impl`이면 기존 `env.impl`과 `worker.impl.md`를 사용한다.
 `impl`이 없다면 키트 디렉터리에서 `./install.sh --profile impl`로 생성하거나 기본 프로필을 쓴다.
-`profile: "impl"`로 등록했다면 `worker-task run "$TASK" -P impl`로 프로필 일치를 확인하며 실행할 수도 있다.
+`profile: "impl"`로 등록했다면 `deepseek-task run "$TASK" -P impl`로 프로필 일치를 확인하며 실행할 수도 있다.
 `-P`는 등록된 프로필을 바꾸는 옵션이 아니며, 다른 이름을 주면 실행을 거절한다.
 프로필이나 명세를 바꾸려면 새 태스크로 등록한다. `instructions` 대신 또는 추가로 `task_file`을 지정할 수 있다.
 태스크 파일 경로는 JSON 파일 디렉터리 기준이고, **등록 시 내용을 복사**한다.
@@ -65,10 +68,10 @@ worker-task result "$TASK"                      # 검증·변경 파일·로그�
 ```bash
 # 다른 터미널에서 submit이 출력한 실제 ID를 입력한다.
 read -r -p '취소할 task ID: ' TASK
-worker-task cancel "$TASK"
+deepseek-task cancel "$TASK"
 ```
 
-실패·취소·중단 결과를 검토한 뒤 `worker-task run "$TASK" --retry`로 재시도한다.
+실패·취소·중단 결과를 검토한 뒤 `deepseek-task run "$TASK" --retry`로 재시도한다.
 재시도는 같은 기준 커밋과 명세를 쓰며, 이전 시도의 수정은 가져오지 않는다. 이전 시도·로그·worktree는 남는다.
 독립 태스크는 별도 터미널 또는 셸의 `&`로 동시에 실행할 수 있다. 중복 `run`은 잠금으로 거절된다.
 관리 모드는 권한 우회·`acceptEdits`·도구 허용 목록을 자동 추가하지 않는다. 기존 Claude 권한을 유지하므로,
@@ -113,8 +116,8 @@ queued → running → verifying → succeeded
 LLM 서버는 추론 접속점일 뿐 계산 노드가 아니다. 새 워커 프로세스에는 부모 Claude의 세션 ID 표지만 전달하지 않으며,
 기존 프로필·권한 설정은 유지한다.
 
-기본 저장 위치는 `${XDG_STATE_HOME:-~/.local/state}/claude-worker/tasks`다.
-`WORKER_TASK_HOME` 또는 모든 명령 앞의 `--state-dir /별도/경로`로 바꿀 수 있다. **원본 체크아웃 안의 저장 위치는 거절**한다.
+기본 저장 위치는 `${XDG_STATE_HOME:-~/.local/state}/deepseek-worker/tasks`다.
+`DEEPSEEK_TASK_HOME` 또는 모든 명령 앞의 `--state-dir /별도/경로`로 바꿀 수 있다. **원본 체크아웃 안의 저장 위치는 거절**한다.
 로컬 파일시스템에서 태스크별 `flock`과 임시 파일→원자적 rename을 사용한다(NFS 공유 실행은 지원하지 않는다).
 태스크/시도 ID별 경로를 쓰며 실패·취소 결과도 자동 삭제하지 않는다. 제거기 역시 태스크 저장소는 지우지 않는다.
 
@@ -140,12 +143,12 @@ LLM 서버는 추론 접속점일 뿐 계산 노드가 아니다. 새 워커 프
 
 ## 외부 검증의 범위
 
-- 워커는 기존 래퍼의 `-p … --output-format json --max-turns 60`으로 실행된다. 정상 종료와 CLI JSON의 성공 응답은
+- 워커는 기존 래퍼의 `-p … --output-format json --max-turns 120`으로 실행된다. 정상 종료와 CLI JSON의 성공 응답은
   **검증 시작 조건**이다. 모델의 “테스트 통과” 문구로 성공을 결정하지 않는다.
 - 기준 worktree의 파일 해시와 최종 파일을 비교한다. 자체 커밋 여부, Git 인덱스, 편집 도구와 무관하게
   추가·수정·삭제·실행 비트·symlink 변경을 검사한다. 미추적 파일과 **ignored 파일도 포함**한다.
 - 허용/보호 경로는 저장된 명세에서 읽는다. 파일 경로, 디렉터리 접두사(`src/`), Python `fnmatch` 패턴을 지원한다.
-  `*`는 `/`도 포함한다. 보호 경로가 우선이며 `tests/`, `config/`, `.claude/`, worktree의 `.git` 포인터는 항상 보호한다.
+  `*`는 `/`도 포함한다. 보호 경로가 우선이며 `tests/`, `config/`, `.claude/`, worktree의 `.git` 포인터와 `.task-inputs/`는 항상 보호한다.
   프로젝트 루트의 설정·검증 스크립트도 반드시 `protected_paths`에 추가한다.
 - 실제 Git 메타데이터 디렉터리는 코드 해시에서 제외하며, worktree의 `.git` 포인터 파일은 무결성을 검사한다.
   submodule은 현재 지원하지 않으며 실행 전에 실패한다.
@@ -156,7 +159,7 @@ LLM 서버는 추론 접속점일 뿐 계산 노드가 아니다. 새 워커 프
   포함하므로 `pytest -p no:cacheprovider`처럼 저장하지 않는 명령을 사용하거나 산출물을 worktree 밖에 둔다.
   Python bytecode 생성은 실행기가 끈다. 이미 워커가 만든 허용 범위 내 산출물은 변경 파일에 표시된다.
   이 버전의 편집 후 훅은 캐시 없는 문법 검사를 쓰며, 관리 모드에서는 worktree 안의 `last-check.log`를 만들지 않는다.
-  기존 프로젝트의 오래된 훅은 `project-init`이 덮어쓰지 않으므로 직접 비교해 업데이트한다.
+  기존 프로젝트의 오래된 훅은 `deepseek-project-init`이 덮어쓰지 않으므로 직접 비교해 업데이트한다.
 - 성공 후 `status`·`result`에서 현재 파일 해시와 명세 해시를 다시 검사한다. 달라졌으면
   `failed / changed_after_verification`으로 무효화한다. 검증 뒤 수동 수정한 코드는 이전 성공 증거로 제출하지 않는다.
   조회 직후의 추가 편집까지 원자적으로 막지는 못하므로 검증된 worktree를 검토 동안 보존하고 편집하지 않는다.
@@ -168,15 +171,57 @@ LLM 서버는 추론 접속점일 뿐 계산 노드가 아니다. 새 워커 프
 자동 merge·commit·push·PR, 원격 실험 스케줄링, 자동 모델 선택은 구현하지 않는다.
 오케스트레이터가 검증 기록과 diff를 검토한 뒤 반영 방법을 직접 결정한다.
 
+## 역할·추론·태스크 연결
+
+`role`은 planner/researcher/implementer/test-author/runner/analyst/reviewer 중 하나이며 기본 implementer다.
+`effort`는 low/high/max 중 하나이며 기본 max다. 프로필의 모델 설정은 그대로 재사용하고, 역할 프롬프트만 실행 시 선택한다.
+태스크에 고정한 effort는 CLI로 전달되고 결과에 기록된다. 서버의 실제 thinking 소비량을 측정한 값은 아니다.
+기본 worker timeout은 1800초, 검증은 명령마다 300초다. 명시한 timeout이 우선한다.
+
+구현 결과를 독립 리뷰에 넘기는 명세 예시:
+
+```json
+{
+  "purpose": "파서 구현 독립 리뷰",
+  "repository": "/absolute/path/to/project",
+  "base_commit": "<생산 태스크와 같은 커밋 해시>",
+  "profile": "",
+  "role": "reviewer",
+  "effort": "max",
+  "inputs": [{"task_id": "<성공한 생산 task ID>", "paths": ["src/durations.py"]}],
+  "instructions": ".task-inputs/<생산 task ID>/src/durations.py를 기준 코드·계약·보호 테스트와 비교한다. 근거와 반례를 reports/review.md에 작성한다. 실제 입력 코드를 검사하고 실행한 명령·한계를 기록한다.",
+  "references": ["tests/"],
+  "allowed_paths": ["reports/review.md"],
+  "protected_paths": ["src/", "tests/"],
+  "verify": ["test -s reports/review.md"],
+  "timeout": 1800,
+  "verify_timeout": 300
+}
+```
+
+이 예시의 검증은 보고서 존재만 확인한다. 내용의 정확성을 보장하는 검사가 아니므로 메인이 근거를 검토해야 한다.
+재현 스크립트/반례가 필요하면 허용 경로와 실행 검증을 계약에 추가한다.
+
+`inputs`는 같은 태스크 저장소 안에서, 같은 repository와 기준 커밋을 사용한 성공 태스크의
+**추가·수정된 일반 파일**을 정확한 상대 경로로 선택한다. 디렉터리/glob·symlink·삭제된 파일은 지원하지 않는다.
+등록 시 생산 시도와 전체 검증 해시, 파일별 해시를 고정하고 실행 직전 다시 확인한다.
+생산 코드/명세가 달라졌거나 재시도된 경우 소비 워커를 시작하지 않는다. 새 입력으로 태스크를 다시 등록한다.
+파일은 consumer의 `.task-inputs/<task ID>/<원래 경로>`에 독립 복사된다. 입력 영역은 항상 보호하며
+consumer 코드에 자동 반영하거나 producer worktree를 수정하지 않는다. 전송 중 해시도 대조한다.
+소비 태스크가 완료한 뒤에는 보존된 복사본의 검증 해시가 그 입력 증거다.
+
+조사/설계 태스크는 reports/에, 테스트 작성 태스크는 candidate-tests/에 산출물을 남기도록 계약한다.
+보호된 tests/를 직접 수정하게 하지 않는다. 테스트 초안을 메인이 검토·채택하고 새로운 기준 커밋에 준비한 뒤
+제품 구현의 독립 수용 검사로 사용한다. `inputs`는 소스 병합이나 보호된 검증 교체 기능이 아니다.
+
 ## 오프라인 검증과 실제 연결 확인
 
 ```bash
-bash tests/selftest.sh                                     # mock CLI, 모델/네트워크 불필요
+./tests/selftest.sh
 python3 -B -m unittest discover -s tests -p 'test_worker_task.py' -v
-bash tests/selftest.sh --real-cli                          # 설치된 CLI 버전 확인; 모델 호출 없음
 ```
 
-두 번째 명령은 실제 Git worktree와 기존 `claude-worker` 래퍼를 사용하고 `claude`만 모의 실행기로 대체한다.
-관리 모드 테스트는 Python 표준 라이브러리와 Git만 필요하다. 기존 selftest의 훅 검사에는 `pytest`도 필요하며 ShellCheck는 선택 사항이다.
-실제 연결은 사용자가 별도로 `llm-probe -P impl` 및 작은 관리 태스크로 확인한다. 프로브도 모델 요청을 보내므로
-오프라인 테스트에 포함하지 않는다. 기존 `bench/run.sh`는 별도의 모델 벤치마크이며 관리 모드의 완료 증거를 대신하지 않는다.
+실제 Git worktree와 deepseek-worker 래퍼를 사용하고 claude만 모의 실행기로 대체한다.
+Python 표준 라이브러리와 Git/Bash가 필요하며 실제 CLI·모델·서버·pytest 설치는 필요하지 않다.
+실제 연결은 별도로 `deepseek-probe` 및 작은 관리 태스크로 확인한다. 프로브는 명시적으로 모델 요청을 보낸다.
+기존 `bench/run.sh`는 선택적인 모델 벤치마크이며 관리 모드의 완료 증거를 대신하지 않는다.

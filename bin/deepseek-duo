@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# claude-duo — tmux 한 창에 오케스트레이터(왼쪽) + 로컬 LLM 워커(오른쪽)를 띄운다.
-# 사용: claude-duo [-w N] [-P 프로필[,프로필…]] [프로젝트 디렉터리]   (기본: 현재 디렉터리, 기본 워커 1개)
+# deepseek-duo — tmux 한 창에 오케스트레이터(왼쪽) + 로컬 LLM 워커(오른쪽)를 띄운다.
+# 사용: deepseek-duo [-w N] [-P 프로필[,프로필…]] [프로젝트 디렉터리]   (기본: 현재 디렉터리, 기본 워커 1개)
 #       -w N              기본 프로필 워커를 N개. 이름 <WORKER_NAME>-1 … -N  (N=1 이면 <WORKER_NAME>)
-#       -P gb10           프로필 워커를 추가로 하나씩 (env.<프로필> 사용). 예: -P gb10
-#       claude-duo --kill 세션 종료
+#       -P review           프로필 워커를 추가로 하나씩 (env.<프로필> 사용). 예: -P review
+#       deepseek-duo --kill 세션 종료
 set -euo pipefail
 
-SESSION="${CLAUDE_DUO_SESSION:-claude-duo}"
-CONF_DIR="${CLAUDE_WORKER_CONF_DIR:-$HOME/.config/claude-worker}"
+SESSION="${DEEPSEEK_DUO_SESSION:-deepseek-duo}"
+CONF_DIR="${DEEPSEEK_WORKER_CONF_DIR:-$HOME/.config/deepseek-worker}"
 N=1; PROFILES=""
 
 while [ $# -gt 0 ]; do
@@ -28,31 +28,31 @@ name_of() { # name_of <env파일> <기본이름>
     # shellcheck disable=SC1090
     (source "$1" && printf '%s' "${WORKER_NAME:-$2}")
 }
-WORKER_BASE="$(name_of "$CONF_DIR/env" llm-worker)"
+WORKER_BASE="$(name_of "$CONF_DIR/env" deepseek-worker)"
 
 if tmux has-session -t "$SESSION" 2>/dev/null; then
-    echo "이미 실행 중: tmux attach -t $SESSION   (끝내려면 claude-duo --kill)"
+    echo "이미 실행 중: tmux attach -t $SESSION   (끝내려면 deepseek-duo --kill)"
     exec tmux attach -t "$SESSION"
 fi
 
 # 워커 목록: "<표시이름>|<명령>"
 PANES=()
 if [ "$N" -eq 1 ]; then
-    PANES+=("@$WORKER_BASE|claude-worker")
+    PANES+=("@$WORKER_BASE|deepseek-worker")
 elif [ "$N" -gt 1 ]; then
-    for i in $(seq 1 "$N"); do PANES+=("@$WORKER_BASE-$i|CLAUDE_WORKER_NAME=$WORKER_BASE-$i claude-worker"); done
+    for i in $(seq 1 "$N"); do PANES+=("@$WORKER_BASE-$i|DEEPSEEK_WORKER_NAME=$WORKER_BASE-$i deepseek-worker"); done
 fi
 IFS=',' read -r -a PLIST <<< "$PROFILES"
 for p in "${PLIST[@]}"; do
     [ -n "$p" ] || continue
     [ -f "$CONF_DIR/env.$p" ] || { echo "프로필 설정이 없습니다: $CONF_DIR/env.$p — install.sh --profile $p" >&2; exit 2; }
-    PANES+=("@$(name_of "$CONF_DIR/env.$p" "llm-worker-$p")|claude-worker -P $p")
+    PANES+=("@$(name_of "$CONF_DIR/env.$p" "deepseek-worker-$p")|deepseek-worker -P $p")
 done
 [ "${#PANES[@]}" -ge 1 ] || { echo "워커가 하나도 없습니다 (-w 0 이면 -P 가 필요)" >&2; exit 2; }
 
 COLS="$(tput cols 2>/dev/null || echo 200)"; LINES="$(tput lines 2>/dev/null || echo 50)"
 [ "$COLS" -ge 120 ] || COLS=200; [ "$LINES" -ge 30 ] || LINES=50
-tmux new-session -d -s "$SESSION" -c "$DIR" -n main -x "$COLS" -y "$LINES" "claude-main; exec bash"
+tmux new-session -d -s "$SESSION" -c "$DIR" -n main -x "$COLS" -y "$LINES" "deepseek-main; exec bash"
 NAMES=""; first=1
 for entry in "${PANES[@]}"; do
     label="${entry%%|*}"; cmd="${entry#*|}"; NAMES="$NAMES $label"

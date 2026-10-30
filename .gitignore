@@ -1,4 +1,9 @@
-proxy/.env
 *.log
 __pycache__/
 .pytest_cache/
+
+# Local credentials/runtime artifacts
+.env
+.env.*
+!.env.example
+*.key

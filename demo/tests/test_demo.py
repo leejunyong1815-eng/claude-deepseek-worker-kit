@@ -95,9 +95,9 @@ class LabDemoTests(unittest.TestCase):
         weakened = run / "weak-task.json"
         weakened.write_text(json.dumps(spec))
         env = dict(os.environ, PATH=str(run / "mock-bin") + os.pathsep + os.environ["PATH"],
-                   CLAUDE_WORKER_CONF_DIR=str(run / "mock-conf"),
+                   DEEPSEEK_WORKER_CONF_DIR=str(run / "mock-conf"),
                    DEMO_REHEARSAL_REFERENCE=str(DEMO / "reference"), PYTHONDONTWRITEBYTECODE="1")
-        runner = [str(DEMO.parent / "bin/worker-task"), "--state-dir", metadata["state_dir"]]
+        runner = [str(DEMO.parent / "bin/deepseek-task"), "--state-dir", metadata["state_dir"]]
         task = subprocess.check_output(runner + ["submit", str(weakened)], env=env, text=True).strip()
         subprocess.run(runner + ["run", task], env=env, check=True, stdout=subprocess.DEVNULL)
         metadata["tasks"][0] = task

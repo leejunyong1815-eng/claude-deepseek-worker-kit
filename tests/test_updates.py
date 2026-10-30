@@ -35,7 +35,7 @@ class ProjectUpdateTests(unittest.TestCase):
         (self.source / "agents/ROLE.md").write_text("role v2\n")
         (self.source / "agents/NEW.md").write_text("new role\n")
         self.state = self.root / "state"
-        self.env = dict(os.environ, CLAUDE_WORKER_KIT=str(self.kit))
+        self.env = dict(os.environ, DEEPSEEK_WORKER_KIT=str(self.kit))
 
     def git(self, repo, *args):
         env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
@@ -46,7 +46,7 @@ class ProjectUpdateTests(unittest.TestCase):
         self.git(repo, "-c", "user.name=Update tests", "-c", "user.email=tests@local", "commit", "-qm", "fixture")
 
     def call(self, *args, code=0, env=None):
-        p = subprocess.run([str(KIT / "bin/project-update"), *args, str(self.project),
+        p = subprocess.run([str(KIT / "bin/deepseek-project-update"), *args, str(self.project),
                             "--state-dir", str(self.state), "--json"], env=env or self.env,
                            capture_output=True, text=True, timeout=10)
         self.assertEqual(p.returncode, code, p.stderr + p.stdout)
@@ -97,7 +97,7 @@ class ProjectUpdateTests(unittest.TestCase):
     def test_missing_history_proposes_instead_of_overwriting(self):
         archive = self.root / "archive"
         shutil.copytree(self.kit, archive, ignore=shutil.ignore_patterns(".git"))
-        env = dict(self.env, CLAUDE_WORKER_KIT=str(archive))
+        env = dict(self.env, DEEPSEEK_WORKER_KIT=str(archive))
         report = self.call("--apply", code=1, env=env)
         self.assertEqual((self.project / "AGENTS.md").read_text(), "rules v1\n")
         self.assertTrue((Path(report["backup_dir"]) / "incoming/AGENTS.md").is_file())
@@ -118,7 +118,7 @@ class ProjectUpdateTests(unittest.TestCase):
     def test_backups_inside_project_are_rejected(self):
         before = self.snapshot()
         self.state = self.project / "backup"
-        process = subprocess.run([str(KIT / "bin/project-update"), "--apply", str(self.project),
+        process = subprocess.run([str(KIT / "bin/deepseek-project-update"), "--apply", str(self.project),
                                   "--state-dir", str(self.state)], env=self.env, capture_output=True)
         self.assertEqual(process.returncode, 2)
         self.assertEqual(self.snapshot(), before)
@@ -137,7 +137,7 @@ class InstallUpdateTests(unittest.TestCase):
         for p in mock.iterdir():
             p.chmod(0o755)
         self.env = dict(os.environ, PATH=str(mock) + os.pathsep + os.environ["PATH"],
-                        CLAUDE_WORKER_CONF_DIR=str(self.conf), UPDATE_NETWORK_MARKER=str(self.root / "network"),
+                        DEEPSEEK_WORKER_CONF_DIR=str(self.conf), UPDATE_NETWORK_MARKER=str(self.root / "network"),
                         FORCE_ENV="1", LLM_MODEL="must-not-replace-existing-model")
         for suffix, model in (("", "base-model"), (".impl", "impl-model")):
             data = ('export LLM_BASE_URL="http://unused.invalid"\nexport LLM_API_KEY="fake-update-test-key"\n'
@@ -160,12 +160,12 @@ class InstallUpdateTests(unittest.TestCase):
         self.assertTrue(all(p.stat().st_mode & 0o777 == 0o600 for p in self.conf.glob("env*")))
         self.assertIn("base-model", (self.conf / "worker.md").read_text())
         self.assertIn("impl-model", (self.conf / "worker.impl.md").read_text())
-        self.assertIn("Implementer discipline", (self.conf / "worker.impl.md").read_text())
+        self.assertIn("Implementer discipline", (self.conf / "roles/role-implementer.md").read_text())
         backups = list(self.conf.glob("prompt-backup.*"))
         self.assertEqual(len(backups), 1)
         self.assertEqual((backups[0] / "worker.impl.md").read_text(), "old custom prompt .impl")
         self.assertFalse((self.root / "network").exists())
-        self.assertTrue((self.prefix / "project-update").is_file())
+        self.assertTrue((self.prefix / "deepseek-project-update").is_file())
 
     def test_invalid_combination_does_not_install(self):
         result = self.call("--update", "--profile", "impl")

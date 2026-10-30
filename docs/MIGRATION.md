@@ -1,32 +1,20 @@
-# 기존 개인 구성에서 옮기기 (ljy 환경 기준)
+# 기존 키트와 함께 사용하기
 
-| 기존 | 새 키트 | 비고 |
+이 버전은 기존 키트의 in-place 모델 교체가 아니다. 별도 저장소와 namespace를 사용한다.
+
+| 항목 | 기존 키트 | DeepSeek 버전 |
 |---|---|---|
-| `~/bin/claude-main` | `claude-main` | 동일. `--remote-control` 은 필요할 때 인자로 (`claude-main --remote-control`) |
-| `~/bin/claude-glm` | `claude-worker` | 서버·모델·토큰이 `~/.config/claude-worker/env` 로 이동 |
-| `~/.config/glm/env` (`GLM_TOKEN`) | `LLM_API_KEY` | |
-| `~/.claude/prompts/glm-worker.md` | `~/.config/claude-worker/worker.md` | 템플릿에서 생성. DRL 하드코딩 → `COMPUTE_HOST/COMPUTE_DESC` |
-| `drl-info/sync/run/submit/fetch` | `remote-info/sync/run/submit/fetch` | 호스트 `DRL`, 경로 `/home/jyl/claude-work` → env 의 `COMPUTE_HOST`, `COMPUTE_WORK_DIR` |
-| `Ask @glm-worker to …` | `Ask @llm-worker to …` | `WORKER_NAME` 으로 바꿀 수 있다. 기존 이름을 유지하려면 `WORKER_NAME=glm-worker` |
-| `agents/SUBAGENT_*_GLM.md` | `agents/ROLE_*.md` | 프로젝트 파일. 내용은 그대로 두고 참조 경로만 바꾸면 된다 |
+| 명령 | claude-main / claude-worker / worker-task | deepseek-main / deepseek-worker / deepseek-task |
+| 실행 파일 기본 경로 | ~/.local/bin | ~/.local/deepseek-worker/bin |
+| 설정 | ~/.config/claude-worker | ~/.config/deepseek-worker |
+| 태스크 상태 | ~/.local/state/claude-worker/tasks | ~/.local/state/deepseek-worker/tasks |
+| 규칙 설치/업데이트 | project-init / project-update | deepseek-project-init / deepseek-project-update |
+| tmux 세션 | claude-duo | deepseek-duo |
 
-연구실 LLM 서버(1.233.219.134, llama.cpp) 값으로 설치하려면:
+기존 API 키·Qwen 설정·상태를 자동 복사하지 않는다. 연구실 DeepSeek 서버 정보를 별도로 입력한다.
+프로젝트에 이미 기존 키트 규칙이 있다면 `deepseek-project-init`은 이를 덮어쓰지 않는다.
+`deepseek-project-update --check`의 충돌을 읽고 incoming 제안을 수동으로 합친다.
+기존 키트의 template history와 다른 파일은 자동 갱신 대상으로 추정하지 않는다.
 
-```bash
-LLM_BASE_URL=http://1.233.219.134:4000 LLM_API_KEY=none LLM_MODEL=qwen3.8-flash-next \
-WORKER_NAME=glm-worker COMPUTE_HOST=DRL COMPUTE_DESC="RTX A6000 48GB x2, 503G RAM" \
-  ./install.sh --non-interactive
-```
-
-(`WORKER_NAME=glm-worker` 는 기존 프로젝트 문서의 `Ask @glm-worker` 를 그대로 쓰기 위한 것이다. 새 프로젝트면 생략한다.)
-서버나 모델을 바꿀 때는 `~/.config/claude-worker/env`의 `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`과
-`LLM_CONTEXT_WINDOW`를 확인한 뒤 `./install.sh --render && llm-probe`로 프롬프트 재생성과 연결 확인을 한다.
-`--render`는 컨텍스트 크기를 자동 조회하지 않는다. API 키가 있는 설정 파일 전체를 보고서·대화에 붙여 넣지 않는다.
-
-코드 수정 위임은 [관리 모드](MANAGED_TASKS.md)를 사용할 수 있다. 기존 프로필과 대화형 메시징은 그대로 유지되며,
-관리 태스크는 기록된 기준 커밋에서 새 worktree로 실행한다. 원본의 미커밋 변경은 자동으로 전달되지 않는다.
-
-기존 `~/bin/claude-glm`, `~/bin/drl-*` 는 지우지 않아도 충돌하지 않는다(이름이 다르다).
-
-이미 키트를 설치한 경우에는 [업데이트 절차](UPDATING.md)로 실행기·모든 프로필 프롬프트·프로젝트 규칙을 각각 갱신한다.
-일반 재설치만으로 프로젝트에 복사된 운영 지침까지 바뀌지는 않는다.
+수동 메시징은 두 버전에서 유지된다. 관리 모드의 task ID와 기록은 각 상태 디렉터리에 속하므로
+서로 바꾸어 사용하지 않는다. 원격 실행 도우미와 Qwen fallback 설정은 이 버전에 포함하지 않는다.
