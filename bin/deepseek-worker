@@ -42,7 +42,7 @@ case "$ROLE" in planner|researcher|implementer|test-author|runner|analyst|review
 # Managed specs are immutable; prevent trailing CLI arguments overriding routing/effort.
 if [ "${DEEPSEEK_TASK_MANAGED:-0}" = 1 ]; then
     for arg in "$@"; do
-        case "$arg" in --effort|--effort=*|--model|--model=*) echo 'managed model/effort override refused' >&2; exit 2;; esac
+        case "$arg" in --effort|--effort=*|--model|--model=*|--settings|--settings=*|--permission-mode|--permission-mode=*|--tools|--tools=*|--allowedTools|--allowedTools=*|--disallowedTools|--disallowedTools=*|--dangerously-skip-permissions|--allow-dangerously-skip-permissions) echo 'managed model/effort/permission override refused' >&2; exit 2;; esac
     done
 fi
 # 셸의 DEEPSEEK_WORKER_NAME 이 설정 파일의 WORKER_NAME 보다 우선한다 (워커를 여러 개 띄울 때).
@@ -63,6 +63,15 @@ BASE_PROMPT=""
 APPEND=(--append-system-prompt "$BASE_PROMPT
 $(cat "$ROLE_FILE")")
 
+# Managed permission rules are generated outside the worktree by the runner.
+SETTINGS=(--settings '{"crossSessionInbound":"accept"}')
+TOOLS=()
+if [ "${DEEPSEEK_TASK_MANAGED:-0}" = 1 ] && [ -n "${DEEPSEEK_WORKER_SETTINGS:-}" ]; then
+    [ -f "$DEEPSEEK_WORKER_SETTINGS" ] || { echo 'managed permission settings missing' >&2; exit 2; }
+    SETTINGS=(--settings "$DEEPSEEK_WORKER_SETTINGS")
+    TOOLS=(--tools default)
+fi
+
 # 모든 모델 계층(opus/sonnet/haiku/fable, 서브에이전트)을 같은 로컬 모델로 묶는다.
 # 그래야 제목 생성 등 백그라운드 호출이 서버가 모르는 모델명으로 나가지 않는다.
 exec env \
@@ -73,6 +82,8 @@ exec env \
   -u MAX_THINKING_TOKENS \
   -u ANTHROPIC_SMALL_FAST_MODEL \
   -u CLAUDE_CODE_AUTO_COMPACT_WINDOW \
+  -u CLAUDE_CODE_MAX_OUTPUT_TOKENS \
+  -u CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL \
   ANTHROPIC_BASE_URL="$LLM_BASE_URL" \
   ANTHROPIC_AUTH_TOKEN="$LLM_API_KEY" \
   ANTHROPIC_MODEL="$LLM_MODEL" \
@@ -81,6 +92,7 @@ exec env \
   ANTHROPIC_DEFAULT_HAIKU_MODEL="$LLM_MODEL" \
   ANTHROPIC_DEFAULT_FABLE_MODEL="$LLM_MODEL" \
   CLAUDE_CODE_SUBAGENT_MODEL="$LLM_MODEL" \
+  CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1 \
   CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
   CLAUDE_CODE_EFFORT_LEVEL="$EFFORT" \
   CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS="${LLM_DISABLE_BETAS:-1}" \
@@ -95,6 +107,7 @@ exec env \
     --model "$LLM_MODEL" \
     --effort "$EFFORT" \
     --name "$WORKER_NAME" \
-    --settings '{"crossSessionInbound":"accept"}' \
+    "${SETTINGS[@]}" \
+    "${TOOLS[@]}" \
     "${APPEND[@]}" \
     "$@"

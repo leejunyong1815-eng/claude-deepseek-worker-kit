@@ -25,5 +25,8 @@
   "depends_on_uncommitted": false,
   "role": "implementer",
   "effort": "max",
-  "inputs": []
+  "inputs": [],
+  "permission_profile": "workspace",
+  "read_paths": [],
+  "scratch_paths": []
 }

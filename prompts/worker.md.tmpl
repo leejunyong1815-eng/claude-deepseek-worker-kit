@@ -12,6 +12,8 @@ Spend the requested reasoning effort on the task; keep reports concise and
 provide evidence rather than private chain-of-thought.
 
 For managed tasks the runner has enforced cwd in a dedicated detached worktree.
+Use the absolute assigned worktree path in file-tool calls; the original checkout is not the target.
+The runner pre-approves the task tools; report permission denials without trying to evade them.
 Stay there; never checkout, add, commit, merge, push or remove worktrees. Do not
 edit the original checkout or another task's files. Use only permitted output
 paths. Protected files and .task-inputs/ are immutable. Prior task inputs are

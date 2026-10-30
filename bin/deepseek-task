@@ -20,6 +20,8 @@ import sys
 import time
 import uuid
 
+from _deepseek_permissions import normalize_permissions, build_settings
+
 
 ACTIVE = {"running", "verifying"}
 DEFAULT_PROTECTED = ["tests/", "config/", ".claude/", ".git", ".task-inputs/"]
@@ -240,7 +242,9 @@ class Tasks:
         if state["state"] == "succeeded":
             try:
                 valid = (digest(read_json(folder / "spec.json")) == state["spec_digest"] and
-                         digest(snapshot(Path(state["worktree"]))) == state["verified_digest"])
+                         digest(snapshot(Path(state["worktree"]))) == state["verified_digest"] and
+                         (not state.get("worker_settings_path") or
+                          digest(read_json(Path(state["worker_settings_path"]))) == state["worker_settings_digest"]))
             except (OSError, ValueError):
                 valid = False
             if not valid:
@@ -291,7 +295,7 @@ class Tasks:
         spec = dict(purpose=purpose, instructions=instructions, repository=str(repo), base_commit=base,
                     profile=profile, role=role, effort=effort, references=refs, allowed_paths=allowed, protected_paths=protected,
                     verify=verify, timeout=limits[0], verify_timeout=limits[1], depends_on_uncommitted=depends,
-                    compute_backend=backend)
+                    compute_backend=backend, worker_permissions=normalize_permissions(raw, spec_path.parent))
         inputs = raw.get("inputs", [])
         if not isinstance(inputs, list):
             raise ValueError("inputs must be a list of {task_id, paths}")
@@ -436,6 +440,9 @@ class Tasks:
                          "verification_stderr": str(output / "verification.stderr.log")}, diff_path=str(output / "changes.diff"))
             self.save(folder, state)
 
+        policy = spec.get("worker_permissions", normalize_permissions({}, folder))
+        settings_path = output / "worker.settings.json"
+        settings_value = None
         secrets = secrets_for(spec["profile"])
         interrupted = []
         previous = {}
@@ -466,6 +473,9 @@ class Tasks:
             env["DEEPSEEK_WORKER_ROLE"] = spec["role"]
             env["DEEPSEEK_WORKER_EFFORT"] = spec["effort"]
             env["DEEPSEEK_TASK_MANAGED"] = "1"
+            env.pop("DEEPSEEK_WORKER_SETTINGS", None)
+            if settings_value is not None:
+                env["DEEPSEEK_WORKER_SETTINGS"] = str(settings_path)
             # This is a separate CLI session in its own worktree, not the parent
             # Claude session. Keep permissions/config; drop only session identity.
             for name in ("CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_CHILD_SESSION"):
@@ -526,6 +536,14 @@ class Tasks:
                 raise ValueError("descendant retained log pipes outside the managed process session")
             return process.returncode, timed_out
 
+        def settings_valid():
+            if settings_value is None:
+                return True
+            try:
+                return digest(read_json(settings_path)) == state["worker_settings_digest"]
+            except (OSError, ValueError):
+                return False
+
         def finish(status, reason):
             if status == "succeeded" and cancelled():
                 status, reason = ("interrupted", "runner_signal") if interrupted else ("cancelled", "cancelled_by_user")
@@ -542,6 +560,16 @@ class Tasks:
             if staged.startswith(b"160000 ") or b"\n160000 " in staged:
                 raise ValueError("managed mode does not support submodules yet")
             self.prepare_inputs(spec, wt)
+            missing_reads = [p for p in policy["read_paths"] if not Path(p).exists()]
+            if missing_reads:
+                raise ValueError("external read path is not available: " + ", ".join(missing_reads))
+            settings_value = build_settings(policy, wt, spec["repository"], spec["protected_paths"])
+            if settings_value is not None:
+                atomic_json(settings_path, settings_value)
+            update(permission_profile=policy["profile"],
+                   worker_settings_path=str(settings_path) if settings_value is not None else None,
+                   worker_settings_digest=digest(settings_value) if settings_value is not None else None,
+                   permission_denial_count=0, permission_denied_tools=[])
             baseline = snapshot(wt)
             atomic_json(output / "baseline.json", baseline)
             missing = [p for p in spec["references"] if not any(matches(f, [p]) for f in baseline)]
@@ -554,6 +582,10 @@ class Tasks:
                       "Stay in this worktree. Do not checkout, add, commit, merge or remove worktrees. "
                       "Leave edits for external verification. Your report is not the success decision.\n"
                       f"Read references: {json.dumps(spec['references'])}\n"
+                      f"External read-only paths: {json.dumps(policy['read_paths'])}\n"
+                      f"External scratch paths: {json.dumps(policy['scratch_paths'])}\n"
+                      "Use the provided permissions to implement and test the task. Do not work around denied operations. "
+                      "Use scratch paths only for this task; do not delete preserved attempts or modify other checkouts.\n"
                       f"Allowed paths: {json.dumps(spec['allowed_paths'])}\n"
                       f"Protected paths: {json.dumps(spec['protected_paths'])}\n"
                       f"Immutable inputs under .task-inputs/<task_id>/: {json.dumps(spec.get('inputs', []))}\n"
@@ -567,14 +599,21 @@ class Tasks:
                 return finish("interrupted" if interrupted else "cancelled", "runner_signal" if interrupted else "cancelled_by_user")
             if timed_out:
                 return finish("failed", "worker_timeout")
-            if rc:
-                return finish("failed", "worker_exit_nonzero")
             try:
                 response = read_json(output / "worker.stdout.log")
                 if not isinstance(response, dict) or not isinstance(response.get("is_error"), bool):
                     raise ValueError("missing result envelope")
             except (ValueError, OSError):
-                return finish("failed", "invalid_worker_result")
+                return finish("failed", "worker_exit_nonzero" if rc else "invalid_worker_result")
+            denials = response.get("permission_denials", [])
+            if isinstance(denials, list) and denials:
+                tools = sorted({d.get("tool_name", "unknown") for d in denials if isinstance(d, dict) and isinstance(d.get("tool_name", "unknown"), str)})
+                update(permission_denial_count=len(denials), permission_denied_tools=tools)
+                return finish("failed", "permission_denied")
+            if rc:
+                return finish("failed", "worker_exit_nonzero")
+            if not settings_valid():
+                return finish("failed", "permission_settings_changed")
             if response["is_error"] or str(response.get("subtype", "")).startswith("error"):
                 return finish("failed", "model_error")
             update(state="verifying")
@@ -599,6 +638,8 @@ class Tasks:
                 if rc:
                     return finish("failed", "verification_exit_nonzero")
             after = snapshot(wt)
+            if not settings_valid():
+                return finish("failed", "permission_settings_changed")
             if before != after:
                 return finish("failed", "changed_during_verification")
             update(verified_digest=digest(after), verification_valid=True)

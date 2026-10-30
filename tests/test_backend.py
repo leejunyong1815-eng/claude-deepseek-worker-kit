@@ -78,6 +78,7 @@ print(json.dumps({'args': sys.argv[1:], 'env': {k:v for k,v in os.environ.items(
         for tier in ('OPUS', 'SONNET', 'HAIKU', 'FABLE'):
             self.assertEqual(data['env'][f'ANTHROPIC_DEFAULT_{tier}_MODEL'], 'lab-flash-alias')
         self.assertIn('Implementer discipline', data['args'][data['args'].index('--append-system-prompt') + 1])
+        self.assertEqual(data['env']['CLAUDE_CODE_SUBAGENT_MODEL_FORCE'],'1')
 
     def test_role_override_does_not_retain_implementer_instructions(self):
         self.install('--non-interactive', config=True)
@@ -94,10 +95,13 @@ print(json.dumps({'args': sys.argv[1:], 'env': {k:v for k,v in os.environ.items(
         self.install('--install-only')
         env = dict(self.env, ANTHROPIC_BASE_URL='https://lab.invalid', ANTHROPIC_MODEL='deepseek',
                    ANTHROPIC_DEFAULT_FABLE_MODEL='deepseek', CLAUDE_CODE_EFFORT_LEVEL='max',
-                   CLAUDE_CODE_MAX_CONTEXT_TOKENS='999', MAX_THINKING_TOKENS='0')
+                   CLAUDE_CODE_MAX_CONTEXT_TOKENS='999', MAX_THINKING_TOKENS='0',
+                   CLAUDE_CODE_SUBAGENT_MODEL_FORCE='1',CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL='wrong-model',
+                   CLAUDE_CODE_MAX_OUTPUT_TOKENS='999')
         data = json.loads(subprocess.check_output([str(self.prefix / 'deepseek-main'), '-p', 'hi'], env=env, text=True))
         for name in ('ANTHROPIC_BASE_URL', 'ANTHROPIC_MODEL', 'ANTHROPIC_DEFAULT_FABLE_MODEL',
-                     'CLAUDE_CODE_EFFORT_LEVEL', 'CLAUDE_CODE_MAX_CONTEXT_TOKENS', 'MAX_THINKING_TOKENS'):
+                     'CLAUDE_CODE_EFFORT_LEVEL', 'CLAUDE_CODE_MAX_CONTEXT_TOKENS', 'MAX_THINKING_TOKENS',
+                     'CLAUDE_CODE_SUBAGENT_MODEL_FORCE','CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL','CLAUDE_CODE_MAX_OUTPUT_TOKENS'):
             self.assertNotIn(name, data['env'])
 
     def test_managed_effort_override_and_profile_traversal_refused(self):

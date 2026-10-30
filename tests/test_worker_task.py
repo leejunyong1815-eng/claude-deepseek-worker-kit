@@ -18,6 +18,16 @@ if '--version' in sys.argv:
     print('2.1.312 (mock)'); sys.exit(0)
 assert '--dangerously-skip-permissions' not in sys.argv
 assert '--permission-mode' not in sys.argv
+if os.environ.get('DEEPSEEK_WORKER_SETTINGS'):
+    from pathlib import Path
+    settings_path=Path(os.environ['DEEPSEEK_WORKER_SETTINGS'])
+    assert settings_path.is_file() and settings_path.parent != Path.cwd()
+    assert sys.argv.count('--settings') == 1
+    assert sys.argv[sys.argv.index('--settings')+1] == str(settings_path)
+    settings=json.loads(settings_path.read_text())
+    assert settings['permissions']['defaultMode'] == 'dontAsk'
+    assert sys.argv[sys.argv.index('--tools')+1] == 'default'
+
 assert not os.environ.get('CLAUDECODE')
 assert not os.environ.get('CLAUDE_CODE_SESSION_ID')
 assert not os.environ.get('CLAUDE_CODE_CHILD_SESSION')
@@ -67,6 +77,15 @@ if mode == 'sleep': time.sleep(30)
 if mode == 'secret':
     print(os.environ['ANTHROPIC_AUTH_TOKEN'], file=sys.stderr)
     Path('src/value.txt').write_text(os.environ['ANTHROPIC_AUTH_TOKEN'])
+if mode == 'settings_edit':
+    Path(os.environ['DEEPSEEK_WORKER_SETTINGS']).write_text('{}')
+if mode in ('permission_denied','permission_denied_exit'):
+    print(json.dumps({'is_error':False,'permission_denials':[{'tool_name':'Write','tool_input':{'content':os.environ['ANTHROPIC_AUTH_TOKEN']}}]}))
+    sys.exit(7 if mode == 'permission_denied_exit' else 0)
+if mode == 'external_read':
+    assert Path(args['input']).read_text() == 'dataset fixture'
+    assert any(args['input'] in rule for rule in settings['permissions']['allow'])
+    assert any(args['input'] in rule for rule in settings['permissions']['deny'])
 if mode == 'nonzero': sys.exit(7)
 if mode == 'invalid': print('Tests passed!'); sys.exit(0)
 print(json.dumps({'is_error': mode == 'model_error', 'result': 'all tests passed'}))
@@ -236,6 +255,46 @@ class ManagedTasks(unittest.TestCase):
             spec.write_text(json.dumps(dict(purpose="review", repository=str(self.repo), instructions="review",
                 allowed_paths=["reports/"], verify=["true"], inputs=[{"task_id": producer, "paths": [path]}])))
             self.assertEqual(self.call("submit", spec, check=False).returncode, 2)
+
+    def test_worker_permissions_are_runtime_files_outside_worktree(self):
+        state=self.run_task(self.submit())
+        self.assertEqual(state['permission_profile'],'workspace')
+        self.assertTrue(Path(state['worker_settings_path']).is_file())
+        self.assertFalse(Path(state['worker_settings_path']).is_relative_to(Path(state['worktree'])))
+        self.assertEqual(state['permission_denial_count'],0)
+        state=self.run_task(self.submit(permission_profile='inherit'))
+        self.assertIsNone(state['worker_settings_path'])
+
+    def test_permission_denials_are_failures_and_not_natural_language_success(self):
+        state=self.run_task(self.submit('permission_denied'),False)
+        self.assertEqual(state['reason'],'permission_denied')
+        self.assertEqual(state['permission_denial_count'],1)
+        self.assertEqual(state['permission_denied_tools'],['Write'])
+        self.assertFalse(state['verification_valid'])
+        self.assertNotIn('offline-secret',json.dumps(state))
+        state=self.run_task(self.submit('permission_denied_exit'),False)
+        self.assertEqual(state['reason'],'permission_denied')
+        self.assertEqual(state['worker_exit_code'],7)
+
+    def test_external_data_and_proposed_settings_are_frozen_at_submit(self):
+        data=self.root/'external dataset.txt';data.write_text('dataset fixture')
+        proposed=self.root/'proposed-settings.json'
+        proposed.write_text(json.dumps({'permissions':{'deny':['Bash(pip *)']}}))
+        task=self.submit('external_read',instructions=json.dumps({'mode':'external_read','input':str(data)}),
+                         read_paths=[str(data)],permissions_file=str(proposed))
+        proposed.write_text('{}')
+        state=self.run_task(task)
+        settings=json.loads(Path(state['worker_settings_path']).read_text())
+        self.assertIn('Bash(pip *)',settings['permissions']['deny'])
+        self.assertEqual(data.read_text(),'dataset fixture')
+        self.assertEqual(self.git('status','--porcelain'),b'')
+
+    def test_worker_settings_tampering_invalidates_verification(self):
+        state=self.run_task(self.submit('settings_edit'),False)
+        self.assertEqual(state['reason'],'permission_settings_changed')
+        state=self.run_task(self.submit())
+        Path(state['worker_settings_path']).write_text('{}')
+        self.assertEqual(self.status(state['task_id'])['state'],'failed')
 
     def test_workspaces_separate_and_original_dirty_preserved(self):
         (self.repo / "src/value.txt").write_text("staged")

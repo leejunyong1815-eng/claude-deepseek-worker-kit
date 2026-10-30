@@ -11,7 +11,7 @@
 - `/v1/messages`/SSE/tool_result 오류: Anthropic 호환 endpoint인지 확인한다. OpenAI 전용 URL은 지원하지 않는다.
 - effort 거부: gateway가 `output_config.effort`를 지원하는지 확인한다. 필요하면 새 명세의 effort를 high로 명시한다.
   HTTP 200만으로 max가 실제 적용됐다고 판단하지 않는다. thinking.budget_tokens로 상한을 강제한다고 주장하지 않는다.
-- 워커 권한 거부: 기존 Claude Code 권한을 검토한다. 관리 실행기는 허용 목록이나 우회 옵션을 자동 추가하지 않는다.
+- 워커 권한 거부: 최신 버전으로 --update한 뒤 result의 permission_denied_tools와 worker_settings_path를 확인한다. 기본 workspace 프로필은 일반 도구를 허용하지만 기존 deny/ask가 우선한다. 외부 데이터는 read_paths로 지정하고, 명시적 제안 규칙은 permissions_file로 등록한다. 자세한 내용은 WORKER_PERMISSIONS.md를 따른다.
 - 작업 실패: `deepseek-task result <ID>`의 reason·워커/검증 종료 코드·timeout·로그를 확인한다.
   worker_timeout과 verification_timeout, model_error와 path_policy_violation을 구분한다.
 - runner_lost: `status`에서 interrupted와 살아 있는 프로세스를 확인한다. 필요하면 해당 ID만 cancel한다.

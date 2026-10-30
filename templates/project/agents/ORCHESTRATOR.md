@@ -21,6 +21,10 @@ DeepSeek 관리 태스크다. Claude native Agent/Workflow를 조용히 대신 �
 8. 실험·결과 분석·문서 초안도 역할별로 맡긴다. 코드나 데이터 의존성은 검증된 inputs로 명시한다.
 
 role: planner/researcher/implementer/test-author/runner/analyst/reviewer.
+permission_profile 기본 workspace는 필요한 파일 도구·Bash·검색·에이전트 도구를 사전 허용한다.
+외부 입력은 read_paths, 임시 출력은 scratch_paths로 명시한다. read_paths의 데이터는 수정하지 않는다.
+기존 settings.json의 allow/ask/deny를 쓰려면 permissions_file을 지정하고, workspace의 넓은 허용을 추가하지 않으려면 custom 프로필을 쓴다. 기존 CLI allow/ask/deny는 계속 병합된다.
+권한 거절은 permission_denied로 실패하므로 결과의 거절 도구와 설정 경로를 확인한다. 우회 옵션으로 재실행하지 않는다.
 profile은 서버·모델 설정을 고르고 role은 실행 프롬프트를 고른다. 기본 프로필 하나로 모든 역할을 사용할 수 있다.
 effort 기본 max는 서버에 보내는 요청이며 실제 thinking 토큰 수/적용을 보장하지 않는다.
 기본 120턴·1800초와 검증 명령별 300초를 사용하고 작업에 맞게 시간 제한을 명시한다.

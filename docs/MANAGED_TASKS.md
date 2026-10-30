@@ -74,8 +74,7 @@ deepseek-task cancel "$TASK"
 실패·취소·중단 결과를 검토한 뒤 `deepseek-task run "$TASK" --retry`로 재시도한다.
 재시도는 같은 기준 커밋과 명세를 쓰며, 이전 시도의 수정은 가져오지 않는다. 이전 시도·로그·worktree는 남는다.
 독립 태스크는 별도 터미널 또는 셸의 `&`로 동시에 실행할 수 있다. 중복 `run`은 잠금으로 거절된다.
-관리 모드는 권한 우회·`acceptEdits`·도구 허용 목록을 자동 추가하지 않는다. 기존 Claude 권한을 유지하므로,
-비대화 권한 부족은 워커 실패 또는 시간 초과로 나타날 수 있다. 필요한 권한은 사용자가 별도로 검토·설정한다.
+관리 모드는 기본 workspace 권한 프로필을 시도별 설정 파일로 전달한다. 기존 deny/ask 규칙은 유지하고, 권한 거절은 permission_denied로 기록한다. 외부 데이터·제안 설정 사용은 [권한 문서](WORKER_PERMISSIONS.md)를 따른다.
 
 ## 미커밋 입력과 격리
 
@@ -134,7 +133,7 @@ LLM 서버는 추론 접속점일 뿐 계산 노드가 아니다. 새 워커 프
 
 결과에는 task/attempt ID, 기준 커밋, worktree, 프로필, 원본 dirty 여부, 변경 파일(추가/삭제/수정),
 워커 종료 코드, 각 검증 종료 코드, 단계별 timeout 여부, 전체 실행 시간, 로그·diff 경로와 실패 이유가 들어간다.
-`worker_timeout`, `worker_exit_nonzero`, `model_error`, `invalid_worker_result`, `path_policy_violation`,
+`worker_timeout`, `worker_exit_nonzero`, `model_error`, `invalid_worker_result`, `permission_denied`, `permission_settings_changed`, `path_policy_violation`,
 `verification_timeout`, `verification_exit_nonzero`, `changed_during_verification`, `execution_error` 등을 구분한다.
 시작 실패·비정상 강제 종료처럼 코드/로그가 존재하지 않는 경우에는 값이 null 또는 파일이 없을 수 있다.
 `artifacts_complete`가 false이면 최종 diff 수집이 끝나지 않은 기록이다. 실행기가 죽고 자식이 남았으면

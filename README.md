@@ -144,6 +144,36 @@ worktree는 파일 충돌을 줄이기 위한 것으로, 같은 사용자 권한
 수동 대화형 메시징은 `deepseek-worker`와 `deepseek-duo -w 2`로 사용할 수 있습니다.
 이 모드의 작업 공간과 검증은 직접 관리해야 합니다. 사용법은 [대화형 모드 문서](docs/INTERACTIVE.md)를 참고하세요.
 
+## 관리 워커 권한
+
+관리 모드는 기본 `workspace` 권한 프로필로 실행합니다. 배정된 worktree의 파일 도구와
+Bash(Python·Node·프로젝트 스크립트), 웹 검색·조회, 일반 에이전트 도구를 사용할 수 있습니다.
+권한 규칙은 시도별 `worker.settings.json`으로 만들어 CLI에 전달하며, 프로젝트 기준 커밋을 수정할 필요가 없습니다.
+
+외부 데이터와 임시 출력이 필요하면 태스크 명세에 경로를 추가합니다.
+
+```json
+{
+  "permission_profile": "workspace",
+  "read_paths": ["/mnt/d/Gateact"],
+  "scratch_paths": ["/tmp/gre_*"],
+  "allowed_paths": ["reports/", "gre/", "candidate-tests/"]
+}
+```
+
+이 예시는 기존 태스크 명세에 추가할 필드입니다. `allowed_paths`는 검증할 worktree 변경 범위이고,
+`read_paths`는 외부 읽기 경로, `scratch_paths`는 외부 쓰기를 허용한 경로입니다.
+테스트·설정·원본 checkout에 대한 파일 도구 수정과 git add/commit/checkout 등의 변경 명령은 계속 제한합니다.
+기존 사용자·프로젝트·조직의 deny/ask 규칙은 우선하며 우회 옵션은 추가하지 않습니다.
+
+제안받은 settings.json을 쓰려면 `permissions_file`에 경로를 지정합니다. 등록할 때 allow/ask/deny만 복사합니다.
+`custom`은 그 파일의 허용 목록을 사용하고, `inherit`는 기존 Claude 권한 동작을 그대로 사용합니다.
+자세한 예시와 적용 범위는 [권한 설정](docs/WORKER_PERMISSIONS.md)에 있습니다.
+
+Bash/Python 허용은 사용자 권한으로 임의의 코드를 실행할 수 있다는 뜻입니다. 파일 도구의 경로 규칙은
+Python 내부의 파일 접근을 차단하지 않습니다. 최종 변경 검증은 유지하며 worktree를 보안 샌드박스로 취급하지 않습니다.
+권한 거절이 발생하면 워커 종료 코드가 0이어도 `failed / permission_denied`로 기록합니다.
+
 ## 업데이트
 
 키트 저장소에서 실행합니다.
@@ -162,7 +192,8 @@ deepseek-project-update --apply /path/to/project
 ```
 
 사용자가 수정한 파일은 유지하고 새 템플릿은 백업 폴더의 `incoming/`에 남깁니다.
-백업과 충돌 처리 방법은 [업데이트 문서](docs/UPDATING.md), 기존 키트와의 차이는 [마이그레이션 문서](docs/MIGRATION.md)에 있습니다.
+기존 메인 대화는 `deepseek-main --resume`으로 이어갈 수 있습니다. 갱신한 AGENTS·ORCHESTRATOR를 다시 읽게 하며,
+새 권한은 새 관리 워커 실행부터 적용됩니다. 백업·resume·충돌 처리 방법은 [업데이트 문서](docs/UPDATING.md), 기존 키트와의 차이는 [마이그레이션 문서](docs/MIGRATION.md)에 있습니다.
 
 ## 테스트와 데모
 

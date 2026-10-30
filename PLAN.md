@@ -1,6 +1,8 @@
 # 구현과 연결 대기 사항
 
-구현됨 (오프라인 코드/테스트로 확인):
+구현됨 (코드/검증 기록으로 확인):
+- 관리 모드 workspace/custom/inherit 권한 프로필, 외부 read/scratch 경로, 고정된 --settings 전달.
+- 권한 거절의 별도 실패 기록, 권한 파일 무결성 검사와 일반 도구 활성화.
 - 새 WSL 설치 문서, 로컬 진단(--check/deepseek-doctor), 명시적 Bash PATH 설정(--setup-path).
 - 새 HOME·공백 경로·독립 clone에서 설치된 CLI로 관리 태스크를 실행하는 회귀 검사.
 - 기존 원자적 상태/잠금, 시도별 detached worktree, 프로세스 식별·취소·복구, 외부 검증 재사용.

@@ -163,7 +163,7 @@ def main():
         for src in (KIT / "bin").iterdir():
             if src.is_file():
                 shutil.copyfile(src, prefix / src.name)
-                (prefix / src.name).chmod(0o755)
+                (prefix / src.name).chmod(0o644 if src.name.startswith("_") and src.suffix == ".py" else 0o755)
         (conf / "kit_dir").write_text(str(KIT) + "\n")
         print(f"Installed commands: {prefix}")
         if args.setup_path:
