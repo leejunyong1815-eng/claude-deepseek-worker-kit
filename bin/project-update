@@ -1,0 +1,200 @@
+#!/usr/bin/env python3
+"""Safely update copied project rules; preserve edits and propose conflicts."""
+import argparse
+from datetime import datetime, timezone
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import stat
+import subprocess
+import sys
+import uuid
+
+
+def sha(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def find_kit():
+    explicit = os.environ.get("CLAUDE_WORKER_KIT")
+    conf = Path(os.environ.get("CLAUDE_WORKER_CONF_DIR", Path.home() / ".config/claude-worker"))
+    candidates = [Path(explicit)] if explicit else []
+    if not explicit:
+        if (conf / "kit_dir").is_file():
+            candidates.append(Path((conf / "kit_dir").read_text().strip()))
+        candidates += [Path(__file__).resolve().parent.parent, Path.home() / "claude-local-worker-kit"]
+    for path in candidates:
+        if (path / "templates/project").is_dir():
+            return path.resolve()
+    raise ValueError("kit not found; set CLAUDE_WORKER_KIT to the source checkout")
+
+
+def git(kit, *args):
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env["GIT_OPTIONAL_LOCKS"] = "0"
+    try:
+        result = subprocess.run(["git", "-C", str(kit), *args], env=env,
+                                capture_output=True, check=False)
+        return result.stdout if result.returncode == 0 else None
+    except OSError:
+        return None
+
+
+def template_files(kit):
+    base = kit / "templates/project"
+    files = [base / "AGENTS.md", base / "KICKOFF_PROMPT.md", base / ".claude/settings.json"]
+    if not all(p.is_file() and not p.is_symlink() for p in files):
+        raise ValueError("incomplete project template: AGENTS, KICKOFF and settings are required")
+    files += sorted((base / "agents").rglob("*"))
+    result = []
+    for path in files:
+        if path.is_symlink():
+            raise ValueError("template symlinks are not supported: " + str(path.relative_to(base)))
+        if path.is_file() and not any(p in {"__pycache__", ".pytest_cache"} for p in path.parts):
+            if path.suffix not in {".pyc", ".log"}:
+                result.append(path)
+    return result
+
+
+def safe_target(project, relative):
+    current = project
+    parts = relative.parts
+    for i, part in enumerate(parts):
+        current = current / part
+        if current.is_symlink():
+            return False
+        if i < len(parts) - 1 and current.exists() and not current.is_dir():
+            return False
+    return not current.exists() or current.is_file()
+
+
+def historical_hashes(kit, relative):
+    path = "templates/project/" + relative.as_posix()
+    commits = git(kit, "log", "--format=%H", "HEAD", "--", path)
+    hashes = set()
+    for commit in (commits or b"").decode().splitlines():
+        data = git(kit, "show", commit + ":" + path)
+        if data is not None:
+            hashes.add(sha(data))
+    return hashes
+
+
+def plan(kit, project):
+    changes = []
+    for source in template_files(kit):
+        relative = source.relative_to(kit / "templates/project")
+        data = source.read_bytes()
+        record = dict(path=relative.as_posix(), status="current", new_sha256=sha(data), old_sha256=None,
+                      _data=data, _mode=stat.S_IMODE(source.stat().st_mode))
+        if not safe_target(project, relative):
+            record["status"] = "blocked"
+        else:
+            target = project / relative
+            if not target.exists():
+                record["status"] = "add"
+            else:
+                old = sha(target.read_bytes())
+                record["old_sha256"] = old
+                if old != record["new_sha256"]:
+                    record["status"] = "update" if old in historical_hashes(kit, relative) else "conflict"
+        changes.append(record)
+    return changes
+
+
+def atomic_write(path, data, mode=0o600):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = path.with_name(".worker-kit-" + uuid.uuid4().hex + ".tmp")
+    try:
+        with temp.open("xb") as out:
+            out.write(data)
+            out.flush()
+            os.fsync(out.fileno())
+        temp.chmod(mode)
+        os.replace(temp, path)
+    finally:
+        temp.unlink(missing_ok=True)
+
+
+def public(changes):
+    return [{k: v for k, v in c.items() if not k.startswith("_")} for c in changes]
+
+
+def apply(kit, project, state):
+    if state == project or project in state.parents:
+        raise ValueError("backup state directory must be outside the project")
+    state.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with (state / "lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        changes = plan(kit, project)
+        pending = [c for c in changes if c["status"] != "current"]
+        backup = None
+        if pending:
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            backup = state / (stamp + "-" + uuid.uuid4().hex[:12])
+            backup.mkdir(mode=0o700)
+        for change in pending:
+            relative = Path(change["path"])
+            target = project / relative
+            # Recheck after planning; a detected concurrent edit becomes a proposal.
+            if not safe_target(project, relative):
+                change["status"] = "blocked"
+            elif target.exists():
+                current = sha(target.read_bytes())
+                if current != change["old_sha256"]:
+                    change["status"] = "conflict"
+            elif change["old_sha256"] is not None:
+                change["status"] = "conflict"
+            if change["status"] in {"blocked", "conflict"}:
+                atomic_write(backup / "incoming" / relative, change["_data"], change["_mode"])
+                continue
+            if target.exists():
+                atomic_write(backup / "before" / relative, target.read_bytes(), stat.S_IMODE(target.stat().st_mode))
+            atomic_write(target, change["_data"], change["_mode"])
+            change["status"] = "added" if change["status"] == "add" else "updated"
+        report = dict(project=str(project), kit=str(kit), mode="apply",
+                      backup_dir=str(backup) if backup else None, files=public(changes))
+        if backup:
+            atomic_write(backup / "report.json", (json.dumps(report, ensure_ascii=False, indent=2) + "\n").encode())
+        return report
+
+
+def main():
+    os.umask(0o077)
+    parser = argparse.ArgumentParser(description=__doc__)
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--check", action="store_true", help="read-only preview (default)")
+    mode.add_argument("--apply", action="store_true", help="backup and update only unchanged known templates")
+    parser.add_argument("project", nargs="?", type=Path, default=Path.cwd())
+    parser.add_argument("--json", action="store_true", help="print metadata only as JSON")
+    parser.add_argument("--state-dir", type=Path, default=Path(os.environ.get("WORKER_PROJECT_UPDATE_HOME",
+        str(Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state"))) / "claude-worker/project-updates"))))
+    args = parser.parse_args()
+    try:
+        project = args.project.expanduser().resolve()
+        if not project.is_dir():
+            raise ValueError("project directory does not exist")
+        kit = find_kit()
+        if args.apply:
+            report = apply(kit, project, args.state_dir.expanduser().resolve())
+        else:
+            report = dict(project=str(project), kit=str(kit), mode="check", backup_dir=None,
+                          files=public(plan(kit, project)))
+    except (OSError, ValueError) as exc:
+        print("project-update: " + str(exc), file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+    else:
+        print(f"project-update ({report['mode']}): {project}")
+        for entry in report["files"]:
+            print(f"  {entry['status']:8} {entry['path']}")
+        if report["backup_dir"]:
+            print("Backups/proposals: " + report["backup_dir"])
+        print("Custom/unknown files are preserved. Review incoming/ proposals; no Git stage/commit is performed.")
+    return int(any(c["status"] in {"conflict", "blocked"} for c in report["files"]))
+
+
+if __name__ == "__main__":
+    sys.exit(main())
