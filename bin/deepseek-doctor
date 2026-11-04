@@ -56,7 +56,7 @@ def main():
                 if sep and name.strip().startswith('LLM_'):
                     parts = shlex.split(raw, comments=True)
                     values[name.strip()] = parts[0] if len(parts) == 1 else ''
-            names = ('LLM_BASE_URL', 'LLM_MODEL', 'LLM_CONTEXT_WINDOW', 'LLM_API_KEY')
+            names = ('LLM_BASE_URL', 'LLM_MODEL', 'LLM_CONTEXT_WINDOW') + (() if values.get('LLM_AUTH_MODE') == 'none' else ('LLM_API_KEY',))
             missing = [n for n in names if not values.get(n) or 'CHANGE_ME' in values[n]]
             check('backend config', not missing, 'present (values hidden)' if not missing else 'missing fields: ' + ', '.join(missing))
             permissions = stat.S_IMODE((conf / 'env').stat().st_mode)

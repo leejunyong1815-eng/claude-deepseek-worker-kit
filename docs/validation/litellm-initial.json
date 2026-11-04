@@ -1,0 +1,187 @@
+{
+  "base_url": "http://1.233.219.161:4000",
+  "date": "2026-11-04",
+  "authentication": "none",
+  "checks": [
+    {
+      "model": "deepseek-v4.1-flash",
+      "check": "messages_tool_continuation",
+      "passed": true,
+      "tool_calls": 1,
+      "continuation_verified": true,
+      "usage": {
+        "input_tokens": 26,
+        "output_tokens": 26,
+        "cache_read_input_tokens": 371
+      },
+      "duration_seconds": 3.013
+    },
+    {
+      "model": "deepseek-v4.1-flash",
+      "check": "messages_sse",
+      "passed": false,
+      "error": "invalid_or_incomplete_response",
+      "duration_seconds": 0.415
+    },
+    {
+      "model": "deepseek-v4.1-flash",
+      "check": "messages_effort",
+      "passed": true,
+      "effort_request_accepted": true,
+      "thinking_block_observed": true,
+      "honored_effort_proven": false,
+      "usage": {
+        "input_tokens": 39,
+        "output_tokens": 16,
+        "cache_read_input_tokens": 0
+      },
+      "duration_seconds": 0.46
+    },
+    {
+      "model": "deepseek-v4.1-flash-oai",
+      "check": "chat_tool_continuation",
+      "passed": true,
+      "tool_calls": 1,
+      "continuation_verified": true,
+      "usage": {
+        "completion_tokens": 172,
+        "prompt_tokens": 385,
+        "total_tokens": 557,
+        "prompt_tokens_details": {
+          "cached_tokens": 361
+        }
+      },
+      "duration_seconds": 4.738
+    },
+    {
+      "model": "deepseek-v4.1-flash-oai",
+      "check": "chat_sse",
+      "passed": false,
+      "error": "invalid_or_incomplete_response",
+      "duration_seconds": 0.175
+    },
+    {
+      "model": "deepseek-v4.1-flash-oai",
+      "check": "responses_text",
+      "passed": true,
+      "completed": true,
+      "usage": {
+        "input_tokens": 40,
+        "input_tokens_details": {
+          "audio_tokens": null,
+          "cached_tokens": 0,
+          "cached_tokens_details": null,
+          "image_tokens": null,
+          "text_tokens": null,
+          "video_tokens": null,
+          "cache_write_tokens": 0
+        },
+        "output_tokens": 22,
+        "output_tokens_details": {
+          "audio_tokens": null,
+          "reasoning_tokens": 15,
+          "text_tokens": null
+        },
+        "total_tokens": 62,
+        "cost": null
+      },
+      "duration_seconds": 0.484
+    },
+    {
+      "model": "qwen3.8-flash-next",
+      "check": "messages_tool_continuation",
+      "passed": true,
+      "tool_calls": 1,
+      "continuation_verified": true,
+      "usage": {
+        "input_tokens": 413,
+        "output_tokens": 57,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0
+      },
+      "duration_seconds": 3.082
+    },
+    {
+      "model": "qwen3.8-flash-next",
+      "check": "messages_sse",
+      "passed": true,
+      "stream_completed": true,
+      "duration_seconds": 0.883
+    },
+    {
+      "model": "qwen3.8-flash-next",
+      "check": "messages_effort",
+      "passed": true,
+      "effort_request_accepted": true,
+      "thinking_block_observed": true,
+      "honored_effort_proven": false,
+      "usage": {
+        "input_tokens": 61,
+        "output_tokens": 39,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0
+      },
+      "duration_seconds": 0.98
+    },
+    {
+      "model": "qwen3.8-flash-next-oai",
+      "check": "chat_tool_continuation",
+      "passed": true,
+      "tool_calls": 1,
+      "continuation_verified": true,
+      "usage": {
+        "completion_tokens": 65,
+        "prompt_tokens": 419,
+        "total_tokens": 484,
+        "completion_tokens_details": {
+          "reasoning_tokens": 43
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "created_cache_tokens": 0
+        }
+      },
+      "duration_seconds": 3.516
+    },
+    {
+      "model": "qwen3.8-flash-next-oai",
+      "check": "chat_sse",
+      "passed": true,
+      "stream_completed": true,
+      "duration_seconds": 0.918
+    },
+    {
+      "model": "qwen3.8-flash-next-oai",
+      "check": "responses_text",
+      "passed": true,
+      "completed": true,
+      "usage": {
+        "input_tokens": 60,
+        "input_tokens_details": {
+          "audio_tokens": null,
+          "cached_tokens": 0,
+          "cached_tokens_details": null,
+          "image_tokens": null,
+          "text_tokens": null,
+          "video_tokens": null,
+          "cache_write_tokens": 0,
+          "input_tokens_per_turn": [],
+          "cached_tokens_per_turn": []
+        },
+        "output_tokens": 40,
+        "output_tokens_details": {
+          "audio_tokens": null,
+          "reasoning_tokens": 33,
+          "text_tokens": null,
+          "tool_output_tokens": 0,
+          "output_tokens_per_turn": [],
+          "tool_output_tokens_per_turn": []
+        },
+        "total_tokens": 100,
+        "cost": null
+      },
+      "duration_seconds": 1.081
+    }
+  ],
+  "note": "Only protocol metadata and token counters retained. Initial strict marker reproduction failures remain recorded; simple PONG rechecks are separate. No keys or thinking text."
+}

@@ -21,11 +21,12 @@ import time
 import uuid
 
 from _deepseek_permissions import normalize_permissions, build_settings
+from _worker_compute import normalize as normalize_compute, checksum as compute_checksum
 
 
 ACTIVE = {"running", "verifying"}
 DEFAULT_PROTECTED = ["tests/", "config/", ".claude/", ".git", ".task-inputs/"]
-ROLES = {"planner", "researcher", "implementer", "test-author", "runner", "analyst", "reviewer"}
+ROLES = {"planner", "researcher", "implementer", "test-author", "runner", "analyst", "reviewer", "compute-runner"}
 
 
 def now():
@@ -231,6 +232,14 @@ class Tasks:
                 state.update(state="failed", reason="artifact_error", verification_valid=False)
 
     def recover(self, folder, state):
+        if state["state"] in ACTIVE and state.get("phase") == "compute" and state.get("compute_result_path"):
+            try:
+                progress = read_json(Path(state["compute_result_path"]))
+                if progress.get("spec_digest") == state.get("compute_job_spec_digest"):
+                    state["compute_progress"] = progress
+                    state["compute_waiting_reason"] = "awaiting_resource_admission" if progress.get("state") == "waiting" else None
+            except (OSError, ValueError):
+                state["compute_waiting_reason"] = "executor_starting"
         if state["state"] in ACTIVE and not alive(state.get("runner")):
             ended = now()
             state.update(state="interrupted", reason="runner_lost", finished_at=ended,
@@ -245,6 +254,9 @@ class Tasks:
                          digest(snapshot(Path(state["worktree"]))) == state["verified_digest"] and
                          (not state.get("worker_settings_path") or
                           digest(read_json(Path(state["worker_settings_path"]))) == state["worker_settings_digest"]))
+                if state.get("compute_result_path"):
+                    valid = valid and digest(read_json(Path(state["compute_result_path"]))) == state["compute_result_digest"]
+                    valid = valid and digest(read_json(Path(state["compute_result_path"]).with_name("compute.spec.json"))) == state["compute_job_spec_digest"]
             except (OSError, ValueError):
                 valid = False
             if not valid:
@@ -268,13 +280,25 @@ class Tasks:
             instructions += "\n" + (spec_path.parent / raw["task_file"]).read_text()
         if not isinstance(purpose, str) or not purpose.strip() or not isinstance(instructions, str) or not instructions.strip():
             raise ValueError("purpose and instructions (or task_file) are required")
-        profile = raw.get("profile", "")
+        profile = raw.get("profile", "qwen" if raw.get("role") == "compute-runner" else "")
         if not isinstance(profile, str) or (profile and not re.fullmatch(r"[A-Za-z0-9_-]+", profile)):
             raise ValueError("invalid profile")
         role = raw.get("role", "implementer")
         effort = raw.get("effort", "max")
         if not isinstance(role, str) or not isinstance(effort, str) or role not in ROLES or effort not in {"low", "high", "max"}:
             raise ValueError("invalid role or effort")
+        max_turns = raw.get("max_turns", 120)
+        if type(max_turns) is not int or not 1 <= max_turns <= 1000:
+            raise ValueError("max_turns must be an integer in [1, 1000]")
+        compute_job = raw.get("compute_job")
+        if role == "compute-runner":
+            compute_job = normalize_compute(compute_job)
+            if compute_job["transport"] == "local" and compute_job["cwd"] != "@worktree":
+                cwd = Path(compute_job["cwd"]).resolve()
+                if cwd == repo or repo in cwd.parents:
+                    raise ValueError("local compute jobs must use @worktree or an explicit directory outside the original checkout")
+        elif compute_job is not None:
+            raise ValueError("compute_job requires role=compute-runner")
         allowed = rules(raw.get("allowed_paths", []), "allowed_paths")
         if not allowed:
             raise ValueError("allowed_paths must not be empty")
@@ -295,7 +319,7 @@ class Tasks:
         spec = dict(purpose=purpose, instructions=instructions, repository=str(repo), base_commit=base,
                     profile=profile, role=role, effort=effort, references=refs, allowed_paths=allowed, protected_paths=protected,
                     verify=verify, timeout=limits[0], verify_timeout=limits[1], depends_on_uncommitted=depends,
-                    compute_backend=backend, worker_permissions=normalize_permissions(raw, spec_path.parent))
+                    compute_backend=backend, max_turns=max_turns, compute_job=compute_job, worker_permissions=normalize_permissions(raw, spec_path.parent))
         inputs = raw.get("inputs", [])
         if not isinstance(inputs, list):
             raise ValueError("inputs must be a list of {task_id, paths}")
@@ -426,7 +450,7 @@ class Tasks:
                          attempts=old["attempts"] + [attempt], state="running", reason=None,
                          base_commit=spec["base_commit"], profile=spec["profile"], worktree=str(wt),
                          compute_backend=spec.get("compute_backend", "local"),
-                         role=spec["role"], effort=spec["effort"], inputs=spec.get("inputs", []),
+                         role=spec["role"], effort=spec["effort"], max_turns=spec.get("max_turns", 120), inputs=spec.get("inputs", []),
                          worker_name=f"task-{task[-12:]}-{attempt}",
                          original_dirty_at_submit=old["original_dirty_at_submit"],
                          original_dirty_at_run=dirty(spec["repository"]), uncommitted_changes_included=False,
@@ -548,6 +572,14 @@ class Tasks:
             if status == "succeeded" and cancelled():
                 status, reason = ("interrupted", "runner_signal") if interrupted else ("cancelled", "cancelled_by_user")
                 state["verification_valid"] = False
+            if spec.get("compute_job") and status in {"cancelled", "interrupted"}:
+                state["compute_cleanup_confirmed"] = False
+                try:
+                    progress = read_json(output / "compute.result.json")
+                    state["compute_result"] = progress
+                    state["compute_cleanup_confirmed"] = bool(progress.get("remote_cleanup_confirmed"))
+                except (OSError, ValueError):
+                    pass
             # Publish the terminal state only after collecting artifacts in finally.
             # Until then another runner must still see this attempt as active.
             state.update(state=status, reason=reason, finished_at=now(), duration_seconds=now() - state["started_at"])
@@ -563,6 +595,33 @@ class Tasks:
             missing_reads = [p for p in policy["read_paths"] if not Path(p).exists()]
             if missing_reads:
                 raise ValueError("external read path is not available: " + ", ".join(missing_reads))
+            baseline = snapshot(wt)
+            atomic_json(output / "baseline.json", baseline)
+            missing = [p for p in spec["references"] if not any(matches(f, [p]) for f in baseline)]
+            if missing:
+                raise ValueError("reference absent from base commit (possibly uncommitted): " + ", ".join(missing))
+            compute_summary = None
+            if spec.get("compute_job"):
+                job = dict(spec["compute_job"])
+                if job["cwd"] == "@worktree":
+                    if job["transport"] != "local":
+                        raise ValueError("@worktree only applies to local compute jobs")
+                    job["cwd"] = str(wt)
+                job_path, result_path = output / "compute.spec.json", output / "compute.result.json"
+                atomic_json(job_path, job)
+                update(phase="compute", compute_result_path=str(result_path), compute_job_spec_digest=digest(job))
+                helper = str(Path(__file__).resolve().with_name("worker-compute-job"))
+                budget = job["wait_timeout"] + job["timeout"] + len(job["verify"]) * job["verify_timeout"] + 60
+                rc, timed_out = execute([helper, str(job_path), "--result", str(result_path)], budget,
+                                        output / "compute.stdout.log", output / "compute.stderr.log")
+                if cancelled():
+                    return finish("interrupted" if interrupted else "cancelled", "runner_signal" if interrupted else "cancelled_by_user")
+                compute_summary = read_json(result_path) if result_path.is_file() else {"state":"interrupted", "reason":"missing_compute_result"}
+                if digest(read_json(job_path)) != digest(job) or compute_summary.get("spec_digest") != compute_checksum(job):
+                    raise ValueError("compute specification/result identity changed")
+                update(compute_job_exit_code=rc, compute_job_timed_out=timed_out, compute_result=compute_summary,
+                       compute_result_digest=digest(compute_summary), phase="worker")
+                policy = dict(policy, read_paths=policy["read_paths"] + [str(result_path)])
             settings_value = build_settings(policy, wt, spec["repository"], spec["protected_paths"])
             if settings_value is not None:
                 atomic_json(settings_path, settings_value)
@@ -570,11 +629,6 @@ class Tasks:
                    worker_settings_path=str(settings_path) if settings_value is not None else None,
                    worker_settings_digest=digest(settings_value) if settings_value is not None else None,
                    permission_denial_count=0, permission_denied_tools=[])
-            baseline = snapshot(wt)
-            atomic_json(output / "baseline.json", baseline)
-            missing = [p for p in spec["references"] if not any(matches(f, [p]) for f in baseline)]
-            if missing:
-                raise ValueError("reference absent from base commit (possibly uncommitted): " + ", ".join(missing))
             prompt = (f"Managed task {task}, attempt {attempt}. Role: {spec['role']}. Requested effort: {spec['effort']}. Purpose: {spec['purpose']}\n"
                       "Compute backend: local (this computer, often WSL). Run the assigned implementation and tests locally. "
                       "The LLM inference server is not the compute backend. Do not use SSH or remote-* for this task.\n"
@@ -589,10 +643,11 @@ class Tasks:
                       f"Allowed paths: {json.dumps(spec['allowed_paths'])}\n"
                       f"Protected paths: {json.dumps(spec['protected_paths'])}\n"
                       f"Immutable inputs under .task-inputs/<task_id>/: {json.dumps(spec.get('inputs', []))}\n"
-                      f"Verification: {json.dumps(spec['verify'])}\n\n{spec['instructions']}")
+                      f"Verification: {json.dumps(spec['verify'])}\n"
+                      f"Trusted compute result (already executed; do not relaunch): {json.dumps(compute_summary)}\n\n{spec['instructions']}")
             worker = str(Path(__file__).resolve().with_name("deepseek-worker"))
             command = [worker] + (["-P", spec["profile"]] if spec["profile"] else [])
-            command += ["-p", prompt, "--output-format", "json", "--max-turns", "120"]
+            command += ["-p", prompt, "--output-format", "json", "--max-turns", str(spec.get("max_turns", 120))]
             rc, timed_out = execute(command, spec["timeout"], output / "worker.stdout.log", output / "worker.stderr.log")
             update(worker_exit_code=rc, worker_timed_out=timed_out)
             if cancelled():
@@ -610,12 +665,19 @@ class Tasks:
                 tools = sorted({d.get("tool_name", "unknown") for d in denials if isinstance(d, dict) and isinstance(d.get("tool_name", "unknown"), str)})
                 update(permission_denial_count=len(denials), permission_denied_tools=tools)
                 return finish("failed", "permission_denied")
+            if response.get("subtype") == "error_max_turns":
+                return finish("failed", "worker_turn_limit")
             if rc:
                 return finish("failed", "worker_exit_nonzero")
             if not settings_valid():
                 return finish("failed", "permission_settings_changed")
             if response["is_error"] or str(response.get("subtype", "")).startswith("error"):
                 return finish("failed", "model_error")
+            if compute_summary is not None:
+                if digest(read_json(result_path)) != state["compute_result_digest"] or digest(read_json(job_path)) != state["compute_job_spec_digest"]:
+                    return finish("failed", "compute_evidence_changed")
+                if state["compute_job_exit_code"] or state["compute_job_timed_out"] or compute_summary.get("state") != "succeeded":
+                    return finish("failed", compute_summary.get("reason") or "compute_job_failed")
             update(state="verifying")
             before = snapshot(wt)
             changed = changes(baseline, before)
@@ -638,6 +700,8 @@ class Tasks:
                 if rc:
                     return finish("failed", "verification_exit_nonzero")
             after = snapshot(wt)
+            if compute_summary is not None and (digest(read_json(result_path)) != state["compute_result_digest"] or digest(read_json(job_path)) != state["compute_job_spec_digest"]):
+                return finish("failed", "compute_evidence_changed")
             if not settings_valid():
                 return finish("failed", "permission_settings_changed")
             if before != after:

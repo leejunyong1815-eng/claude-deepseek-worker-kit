@@ -20,7 +20,7 @@ def config(profile):
         if sep:
             tokens = shlex.split(text, comments=True)
             values[name.strip()] = tokens[0] if tokens else ''
-    for name in ('LLM_BASE_URL', 'LLM_API_KEY', 'LLM_MODEL'):
+    for name in (('LLM_BASE_URL', 'LLM_MODEL') if values.get('LLM_AUTH_MODE') == 'none' else ('LLM_BASE_URL', 'LLM_API_KEY', 'LLM_MODEL')):
         if not values.get(name) or 'CHANGE_ME' in values[name]:
             raise ValueError('unconfigured lab backend: ' + name)
     return values
@@ -37,12 +37,13 @@ def main():
     p.add_argument('--models', action='store_true', help='only list model IDs; no generation requests')
     args = p.parse_args()
     settings = config(args.profile)
-    key = settings['LLM_API_KEY']
+    key = settings.get('LLM_API_KEY', '') if settings.get('LLM_AUTH_MODE') != 'none' else ''
     opener = urllib.request.build_opener(NoRedirect)
 
     def request(path, body=None, stream=False):
-        headers = {'content-type': 'application/json', 'anthropic-version': '2023-06-01',
-                   'Authorization': 'Bearer ' + key, 'x-api-key': key}
+        headers = {'content-type': 'application/json', 'anthropic-version': '2023-06-01'}
+        if key:
+            headers.update({'Authorization': 'Bearer ' + key, 'x-api-key': key})
         data = json.dumps(body).encode() if body is not None else None
         req = urllib.request.Request(settings['LLM_BASE_URL'].rstrip('/') + path, data=data, headers=headers)
         with opener.open(req, timeout=60) as response:

@@ -15,7 +15,7 @@ from string import Template
 KIT = Path(__file__).resolve().parents[1]
 BACKEND_DEFAULTS = json.loads((KIT / "config/backend.defaults.json").read_text())
 ROLES = {"plan": "planner", "research": "researcher", "impl": "implementer",
-         "test": "test-author", "run": "runner", "analysis": "analyst", "review": "reviewer"}
+         "test": "test-author", "run": "runner", "analysis": "analyst", "review": "reviewer", "qwen": "compute-runner"}
 
 
 def load(path):
@@ -100,12 +100,15 @@ def main():
     p.add_argument("--update", action="store_true", help="preserve settings; back up and regenerate prompts offline")
     p.add_argument("--render", action="store_true")
     p.add_argument("--profile", default="")
+    p.add_argument("--migrate-backend", action="store_true", help="explicitly update the selected saved profile to current lab endpoint/model/context; preserve credentials")
     p.add_argument("--check", action="store_true", help="check local tools/Claude flags without installing or calling a model")
     p.add_argument("--setup-path", action="store_true", help="write shell.sh and add one source line to ~/.bashrc")
     probe = p.add_mutually_exclusive_group()
     probe.add_argument("--probe", action="store_true", help="explicitly send small API compatibility requests")
     probe.add_argument("--skip-probe", action="store_true", help="compatibility alias; no probe is the default")
     args = p.parse_args()
+    if args.check and args.migrate_backend:
+        p.error("--check cannot migrate configuration")
     if args.check:
         if any((args.install_only, args.update, args.render, args.profile, args.probe, args.setup_path)):
             p.error("--check cannot be combined with installation modes")
@@ -113,6 +116,8 @@ def main():
     if args.render and args.setup_path:
         p.error("--setup-path requires installation, not --render")
     conf = Path(os.environ.get("DEEPSEEK_WORKER_CONF_DIR", "~/.config/deepseek-worker")).expanduser().resolve()
+    if args.migrate_backend and any((args.update, args.render, args.install_only)):
+        p.error("--migrate-backend cannot be combined with other installation modes")
     if args.profile and not re.fullmatch(r"[A-Za-z0-9_-]+", args.profile):
         p.error("invalid profile")
     if sum((args.install_only, args.update, args.render)) > 1 or (args.update and args.profile):
@@ -125,18 +130,31 @@ def main():
     target = conf / ("env" + ("." + args.profile if args.profile else ""))
     if not (args.install_only or args.update or args.render):
         inherited = load(conf / "env") if (conf / "env").is_file() else {}
-        if target.is_file() and os.environ.get("FORCE_ENV") != "1":
+        if target.is_file() and os.environ.get("FORCE_ENV") != "1" and not args.migrate_backend:
             values = load(target)
             print("Existing configuration preserved (FORCE_ENV=1 to replace explicitly).")
         else:
             fields = ("LLM_BASE_URL", "LLM_API_KEY", "LLM_MODEL", "LLM_CONTEXT_WINDOW")
             values = {k: os.environ.get(k, inherited.get(k, BACKEND_DEFAULTS.get(k, ""))) for k in fields}
+            if args.migrate_backend:
+                values = dict(load(target) if target.is_file() else inherited, **{k: BACKEND_DEFAULTS[k] for k in ("LLM_BASE_URL", "LLM_MODEL", "LLM_CONTEXT_WINDOW")})
+            if args.profile == "qwen":
+                values["LLM_MODEL"] = os.environ.get("LLM_MODEL", BACKEND_DEFAULTS["QWEN_MODEL"])
+            default_mode = "api_key" if values.get("LLM_API_KEY") else BACKEND_DEFAULTS.get("LLM_AUTH_MODE", "api_key")
+            mode = os.environ.get("LLM_AUTH_MODE", values.get("LLM_AUTH_MODE", inherited.get("LLM_AUTH_MODE", default_mode)))
+            if mode not in {"api_key", "none"}:
+                p.error("LLM_AUTH_MODE must be api_key or none")
+            values["LLM_AUTH_MODE"] = mode
             if not args.non_interactive:
                 for name in fields:
+                    if name == "LLM_API_KEY" and mode == "none":
+                        continue
                     answer = (getpass.getpass("Lab API key (hidden; Enter keeps existing): ") if name == "LLM_API_KEY"
                               else input(f"{name} [{values[name]}]: "))
                     values[name] = answer or values[name]
             for name in fields:
+                if name == "LLM_API_KEY" and mode == "none":
+                    continue
                 value = values[name]
                 if not value or "CHANGE_ME" in value or value in {"none", "dummy"}:
                     p.error(f"{name} is required; obtain the lab server settings (no official API default)")
@@ -180,10 +198,13 @@ def main():
         if (conf / "roles").is_dir():
             shutil.copytree(conf / "roles", backup / "roles")
         print(f"Prompt backup: {backup}")
-    if values is not None and (not target.is_file() or os.environ.get("FORCE_ENV") == "1"):
+    if values is not None and (not target.is_file() or os.environ.get("FORCE_ENV") == "1" or args.migrate_backend):
+        if target.is_file():
+            backup = Path(tempfile.mkdtemp(prefix="backend-backup.", dir=conf))
+            shutil.copy2(target, backup / target.name)
         write(target, values)
     render(conf)
-    print("Prompts rendered. Local compute / WSL; requested effort=max unless configured otherwise.")
+    print("Prompts rendered. Code workspace: local/WSL; explicit compute jobs may use SSH. Requested effort=max unless configured otherwise.")
     if args.probe:
         command = [str(args.prefix.expanduser().resolve() / "deepseek-probe")]
         if args.profile:

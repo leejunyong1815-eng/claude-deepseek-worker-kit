@@ -1,4 +1,39 @@
-# 연구실 DeepSeek 서버 확인 기록 (2026-10-30)
+# 연구실 LiteLLM 서버
+
+현재 기본 주소는 http://1.233.219.161:4000 이다. 새 설치는 인증 모드 none을 사용한다.
+기본값에 실제 API 키는 없다. 모델 목록과 /model/info를 조회해 아래 구성을 확인했다.
+
+| 역할 | Anthropic 모델 ID | OpenAI 호환 모델 ID | 프록시 max_input_tokens |
+|---|---|---|---|
+| 일반 위임 | deepseek-v4.1-flash | deepseek-v4.1-flash-oai | 262144 |
+| Compute Job 운영 | qwen3.8-flash-next | qwen3.8-flash-next-oai | 262144 |
+
+컨텍스트는 프록시 메타데이터 값이며 256K 입력을 실제로 채워 품질을 검증한 결과는 아니다.
+출력 예산을 합쳐 무제한으로 사용할 수 있다는 뜻도 아니다. 이전 서버의 1M 설정은 승계하지 않는다.
+
+실제 모델에 도구 호출과 tool-result 연속 요청, SSE 종료, thinking/effort 요청,
+Responses 텍스트 요청을 보냈다. 키·thinking 원문 없이 [API 검사](validation/litellm-compatibility.json),
+[초기 실패](validation/litellm-initial.json), [Responses 재검사](validation/litellm-responses-recheck.json)에 요약을 남겼다.
+DeepSeek의 복잡한 영문 marker 문자열 재현에는 실패 사례가 있었다. 단순 PONG의 SSE 전달은
+재검사에서 통과했으며, 이 사실을 모든 프롬프트의 내용 정확성으로 일반화하지 않는다.
+Responses의 단순 텍스트 통과도 Codex 전체 도구 호환성을 증명하지 않는다.
+
+[실제 Claude CLI 검사](validation/managed-local-cpu.json)로 DeepSeek 구현/보호 테스트와 Qwen CPU 잡 운영 태스크를 실행했다.
+CPU 잡은 실행기가 수행하고 독립 검증 후 Qwen에 결과를 전달했다. 실제 원격 GPU 호출은 하지 않았다.
+속도·동시 처리량·모델 간 품질/비용 우위는 새 서버에서 측정하지 않았다.
+Claude CLI의 costUSD는 서버 청구액이 아니므로 비용 근거로 쓰지 않는다.
+
+```bash
+python3 -B bench/litellm_check.py --base-url http://1.233.219.161:4000 --output /tmp/litellm-check.json
+```
+
+이 명령은 실제 모델 요청을 보낸다. 인증이 필요하면 LLM_API_KEY를 환경변수로 제공한다.
+기존 env의 마이그레이션은 README/UPDATING.md를 따른다.
+
+## 이전 서버의 기록 (2026-10-30)
+
+아래는 이전 주소에서 당시 측정한 기록이다. 현재 기본값이나 새 서버의 속도 측정이 아니다.
+
 
 기본값은 [backend.defaults.json](../config/backend.defaults.json)에 저장한다. API 키는 포함하지 않는다.
 이 기록은 해당 날짜의 서버 응답이며 이후 배포 설정이 바뀌면 다시 확인해야 한다.

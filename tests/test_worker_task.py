@@ -34,7 +34,7 @@ assert not os.environ.get('CLAUDE_CODE_CHILD_SESSION')
 assert os.environ['ANTHROPIC_MODEL'] == 'mock-model'
 assert os.environ['CLAUDE_CODE_EFFORT_LEVEL'] == os.environ['DEEPSEEK_WORKER_EFFORT']
 assert sys.argv[sys.argv.index('--effort') + 1] == os.environ['DEEPSEEK_WORKER_EFFORT']
-assert sys.argv[sys.argv.index('--max-turns') + 1] == '120'
+assert 1 <= int(sys.argv[sys.argv.index('--max-turns') + 1]) <= 1000
 assert os.environ['DEEPSEEK_WORKER_ROLE'] in sys.argv[sys.argv.index('-p') + 1]
 for tier in ('OPUS', 'SONNET', 'HAIKU', 'FABLE'):
     assert os.environ['ANTHROPIC_DEFAULT_' + tier + '_MODEL'] == 'mock-model'
@@ -43,6 +43,10 @@ assert not os.environ.get('MAX_THINKING_TOKENS')
 prompt = sys.argv[sys.argv.index('-p') + 1]
 args = json.loads(prompt.rsplit('\n\n', 1)[1])
 mode = args.get('mode', 'edit')
+if mode == 'budget':
+    Path('src/budget.txt').write_text(sys.argv[sys.argv.index('--max-turns')+1])
+if mode == 'turn_limit':
+    print(json.dumps({'is_error':True,'subtype':'error_max_turns'}));sys.exit(1)
 if mode == 'new_module':
     Path('src/generated.py').write_text('def twice(value):\n    return value * 2\n')
 elif mode != 'candidate':
@@ -109,8 +113,9 @@ class ManagedTasks(unittest.TestCase):
         config = 'export LLM_BASE_URL=http://unused.invalid\nexport LLM_API_KEY=offline-secret-12345\nexport LLM_MODEL=mock-model\nexport LLM_CONTEXT_WINDOW=32000\n'
         (conf / "env").write_text(config)
         (conf / "env.impl").write_text(config)
+        (conf / "env.qwen").write_text(config)
         self.env = dict(os.environ, PATH=str(self.mock) + os.pathsep + os.environ["PATH"],
-                        DEEPSEEK_WORKER_CONF_DIR=str(conf), PYTHONDONTWRITEBYTECODE="1")
+                        DEEPSEEK_WORKER_CONF_DIR=str(conf), PYTHONDONTWRITEBYTECODE="1", XDG_STATE_HOME=str(self.root / "runtime"))
         # Do not inherit the test runner's Git overrides.
         for key in list(self.env):
             if key.startswith("GIT_"):
@@ -189,6 +194,47 @@ class ManagedTasks(unittest.TestCase):
         p = self.call("run", task, *extra, check=False)
         self.assertEqual(p.returncode, 0 if success else 1, p.stderr + p.stdout)
         return json.loads(p.stdout)
+
+    def test_task_turn_budget_reaches_cli_and_limit_failure_is_distinct(self):
+        state = self.run_task(self.submit('budget', max_turns=320))
+        self.assertEqual(state['max_turns'], 320)
+        self.assertEqual((Path(state['worktree'])/'src/budget.txt').read_text(), '320')
+        result = self.run_task(self.submit('turn_limit'), False)
+        self.assertEqual(result['reason'], 'worker_turn_limit')
+
+    def test_compute_job_is_executed_and_evidence_is_verified_outside_model(self):
+        job = dict(resource='cpu', transport='local', cwd='@worktree',
+                   command=['python3','-c',"from pathlib import Path; Path('src/job.txt').write_text(str(sum(range(11))))"],
+                   verify=[['python3','-c',"from pathlib import Path; assert Path('src/job.txt').read_text() == '55'"]])
+        task = self.submit(role='compute-runner', profile='qwen', compute_job=job)
+        result = self.run_task(task)
+        self.assertEqual(result['profile'], 'qwen')
+        self.assertEqual(result['compute_result']['state'], 'succeeded')
+        self.assertEqual(result['compute_result']['verification_exit_codes'], [0])
+        self.assertIn('src/job.txt', [x['path'] for x in result['changed_files']])
+        evidence = Path(result['compute_result_path'])
+        evidence.write_text('{}')
+        self.assertEqual(self.status(task)['reason'], 'changed_after_verification')
+        bad = dict(job, command=['python3','-c','raise SystemExit(9)'])
+        result = self.run_task(self.submit(role='compute-runner', profile='qwen', compute_job=bad), False)
+        self.assertEqual(result['worker_exit_code'], 0)
+        self.assertEqual(result['reason'], 'compute_exit_nonzero')
+        self.assertEqual(result['compute_result']['command_exit_code'], 9)
+
+    def test_managed_compute_progress_and_cancel_use_existing_task_interface(self):
+        job = dict(resource='cpu', transport='local', cwd='@worktree',
+                   command=['python3','-c','import time;time.sleep(20)'],
+                   verify=[['python3','-c','assert True']], timeout=25)
+        task=self.submit(role='compute-runner', profile='qwen', compute_job=job)
+        process=self.start(task)
+        state=self.wait_for(task, lambda s:s.get('compute_progress',{}).get('state')=='running')
+        self.assertEqual(state['phase'],'compute')
+        self.call('cancel',task)
+        process.wait(timeout=4)
+        result=self.status(task)
+        self.assertEqual(result['state'],'cancelled')
+        self.assertFalse(result['verification_valid'])
+        self.assertIn('compute_cleanup_confirmed', result)
 
     def test_role_and_effort_recorded_and_sent_to_actual_cli(self):
         for role in ("planner", "researcher", "implementer", "test-author", "runner", "analyst", "reviewer"):

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Qwen operational worker; all ordinary delegation remains on DeepSeek.
+set -euo pipefail
+exec "$(dirname "$(readlink -f "$0")")/deepseek-worker" -P qwen "$@"

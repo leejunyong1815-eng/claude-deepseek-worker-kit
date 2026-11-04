@@ -48,6 +48,7 @@ print(json.dumps({'args': sys.argv[1:], 'env': {k:v for k,v in os.environ.items(
         self.assertTrue((self.prefix / 'deepseek-task').is_file())
         p = subprocess.run([str(self.prefix / 'deepseek-worker'), '-p', 'hi'], env=self.env, capture_output=True)
         self.assertEqual(p.returncode, 2)
+        self.env['LLM_AUTH_MODE'] = 'api_key'
         self.install('--non-interactive', code=2)
         self.assertFalse((self.conf / 'env').exists())
 
@@ -56,16 +57,27 @@ print(json.dumps({'args': sys.argv[1:], 'env': {k:v for k,v in os.environ.items(
         self.install('--non-interactive')
         data = json.loads(subprocess.check_output([str(self.prefix / 'deepseek-worker'), '-p', 'hi'],
                                                   env=self.env, text=True))
-        self.assertEqual(data['env']['ANTHROPIC_BASE_URL'], 'http://133.186.146.224:8081')
-        self.assertEqual(data['env']['ANTHROPIC_MODEL'], 'DeepSeek-V4.1-Flash')
-        self.assertEqual(data['env']['CLAUDE_CODE_MAX_CONTEXT_TOKENS'], '1048576')
+        self.assertEqual(data['env']['ANTHROPIC_BASE_URL'], 'http://1.233.219.161:4000')
+        self.assertEqual(data['env']['ANTHROPIC_MODEL'], 'deepseek-v4.1-flash')
+        self.assertEqual(data['env']['CLAUDE_CODE_MAX_CONTEXT_TOKENS'], '262144')
         self.assertEqual(data['env']['ANTHROPIC_AUTH_TOKEN'], 'offline-default-key')
 
     def test_defaults_file_never_provides_credentials(self):
         defaults = json.loads((KIT / 'config/backend.defaults.json').read_text())
-        self.assertEqual(set(defaults), {'LLM_BASE_URL', 'LLM_MODEL', 'LLM_CONTEXT_WINDOW'})
+        self.assertEqual(set(defaults), {'LLM_BASE_URL', 'LLM_MODEL', 'LLM_CONTEXT_WINDOW', 'LLM_AUTH_MODE', 'QWEN_MODEL'})
+        self.env['LLM_AUTH_MODE'] = 'api_key'
         result = self.install('--non-interactive', code=2)
         self.assertIn('LLM_API_KEY is required', result.stderr)
+
+    def test_keyless_proxy_and_qwen_profile_are_explicit_and_separate(self):
+        self.install('--non-interactive')
+        self.install('--profile', 'qwen', '--non-interactive')
+        base = json.loads(subprocess.check_output([str(self.prefix/'deepseek-worker'), '-p', 'hi'], env=self.env, text=True))
+        qwen = json.loads(subprocess.check_output([str(self.prefix/'qwen-worker'), '-p', 'hi'], env=self.env, text=True))
+        self.assertEqual(base['env']['ANTHROPIC_MODEL'], 'deepseek-v4.1-flash')
+        self.assertEqual(qwen['env']['ANTHROPIC_MODEL'], 'qwen3.8-flash-next')
+        self.assertEqual(base['env']['ANTHROPIC_AUTH_TOKEN'], 'litellm-no-auth')
+        self.assertIn('Compute job operator (Qwen)', qwen['args'][qwen['args'].index('--append-system-prompt')+1])
 
     def test_configuration_is_private_offline_and_all_tiers_use_exact_alias(self):
         self.install('--non-interactive', config=True)

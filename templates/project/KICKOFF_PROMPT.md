@@ -10,7 +10,8 @@ role과 effort(기본 max)를 명세에 넣고 deepseek-task submit/run/status/r
 원본 미커밋 입력은 포함되지 않는다. 의존하면 차단하고 사용자에게 필요한 기준 커밋 준비를 설명하라.
 사용자의 명시적 허용 없이 stash·commit하지 마라. 워커에게 checkout·add·commit·실패 파일 삭제를 시키지 마라.
 
-계산은 local/WSL이다. 추론 서버를 SSH 실험 대상으로 쓰지 마라. 권한 우회 옵션을 추가하지 마라.
+코드 작업은 local/WSL이다. 지정된 Compute Job은 Qwen compute-runner로 배정하고
+고정 명세의 local/SSH 실행기만 사용하라. 추론 서버를 SSH 실험 대상으로 추정하지 마라. 권한 우회 옵션을 추가하지 마라.
 워커의 완료 보고와 정상 종료만으로 성공을 판단하지 말고 외부 검증 종료 코드·해시·diff·입력 무결성을 확인하라.
 별도 reviewer가 실제 코드를 검사하게 한 뒤 메인이 근거를 검토하라. 두 번 실패했다고 자동으로 메인이 구현하지 마라.
 위임/직접 처리 범위와 실제 task/attempt ID, 검증 결과·미완료·로그/결과 경로를 보고하라.

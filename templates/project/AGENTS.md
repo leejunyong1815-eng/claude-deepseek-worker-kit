@@ -5,7 +5,7 @@
 정책과 절차는 agents/ORCHESTRATOR.md, 역할은 agents/ROLE_*.md를 읽는다.
 
 - 관리 CLI: deepseek-task submit/run/status/result/cancel. role은 researcher, planner, implementer,
-  test-author, runner, analyst, reviewer 중 선택한다. 기본 요청 effort=max다.
+  test-author, runner, analyst, reviewer 중 선택한다. Compute Job은 Qwen의 compute-runner에 배정한다. 기본 요청 effort=max다.
 - 메인은 목표·계약·예산·권한·독립 수용 검사 신뢰성·최종 결정에 집중한다. 스켈레톤은 선택이다.
 - 여러 관련 파일과 완결된 모듈을 위임할 수 있다. 단순히 파일이 여러 개라는 이유로 메인이 구현하지 않는다.
 - 별도 task ID/worktree에서 독립 태스크를 병렬 실행할 수 있다. 실제 서버와 로컬 자원을 고려해 수를 정한다.
@@ -17,7 +17,9 @@
   필요한 커밋은 사용자가 준비한다. 사용자가 명시적으로 허용한 경우에만 메인이 승인된 파일을 커밋할 수 있다.
 - 서로의 작업 공간·Git 상태를 바꾸지 않는다. 실패·취소·중단 결과는 보존한다. 자동 삭제·stash·반영하지 않는다.
 - 관리 권한 기본은 workspace다. 외부 데이터는 read_paths, 외부 임시 출력은 scratch_paths로 명시한다. 권한 거절을 직접 구현으로 대체하지 않고 permission_denied를 해결한다.
-- compute backend는 현재 컴퓨터/WSL의 local이다. 추론 서버를 원격 계산 대상으로 사용하지 않는다.
+- 코드 작업은 local/WSL이다. 명시된 Compute Job은 compute_job의 local/ssh 대상에서 실행한다.
+  추론 서버를 SSH 계산 대상으로 추정하지 않는다. 원격 source는 사전 준비하며 자동 업로드하지 않는다.
+  Qwen은 잡 운영, DeepSeek는 일반 서브에이전트 업무와 실험 코드·분석을 맡는다.
 - 워커 종료 코드 0이나 '테스트 통과' 보고는 성공이 아니다. 외부 검증과 코드 해시·diff를 확인한다.
 - worktree는 보안 샌드박스가 아니다. 같은 사용자 권한의 절대 경로/공유 Git refs 접근을 차단하지 않는다.
 - 기존 대화형 메시징은 유지되지만 자동 격리·상태·검증이 없다. 코드 작업에는 관리 모드를 사용한다.

@@ -16,9 +16,9 @@ if '--version' in sys.argv:
 if '--help' in sys.argv:
     print('--effort LEVEL --name NAME'); sys.exit(0)
 assert '--dangerously-skip-permissions' not in sys.argv
-assert os.environ['ANTHROPIC_MODEL'] == 'DeepSeek-V4.1-Flash'
+assert os.environ['ANTHROPIC_MODEL'] == 'deepseek-v4.1-flash'
 assert os.environ['CLAUDE_CODE_EFFORT_LEVEL'] == 'max'
-assert os.environ['CLAUDE_CODE_MAX_CONTEXT_TOKENS'] == '1048576'
+assert os.environ['CLAUDE_CODE_MAX_CONTEXT_TOKENS'] == '262144'
 Path('src/result.txt').write_text('42')
 print(json.dumps({'is_error':False, 'result':'fixture complete'}))
 '''

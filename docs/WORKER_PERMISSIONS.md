@@ -93,3 +93,10 @@ GLM 래퍼에서 쓰던 CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1도 반영해 일반 �
 검증은 모의 CLI 회귀 검사와 실제 DeepSeek 호출을 구분한다. 실제 호출에서는 임시 Git 저장소·외부 입력 fixture를 사용했으며,
 /mnt/d의 연구 데이터에는 접근하지 않았다. Read/Write/Bash 실행, 보고서·코드·후보 테스트 생성과 독립 Python 검증을 확인한다.
 원시 API 키나 thinking 원문을 저장소에 남기지 않는다. 실행 결과 요약은 validation/managed-permissions.json에 기록한다.
+
+## Qwen Compute Job
+
+원격 계산 권한은 모델의 임의 SSH 허용으로 확장하지 않는다. 메인이 등록 시 고정한
+compute_job만 별도 실행기가 local/SSH로 수행한다. SSH는 BatchMode와 기존 known_hosts를 사용한다.
+Qwen은 실행 뒤 읽기 경로로 제공된 compute.result.json과 작업 출력으로 운영 보고서를 작성한다.
+일반 DeepSeek 워커의 직접 SSH·rsync 제한은 유지된다. 자세한 범위는 COMPUTE_JOBS.md를 참고한다.

@@ -167,6 +167,21 @@ class InstallUpdateTests(unittest.TestCase):
         self.assertFalse((self.root / "network").exists())
         self.assertTrue((self.prefix / "deepseek-project-update").is_file())
 
+    def test_explicit_backend_migration_preserves_key_and_other_profiles(self):
+        other=(self.conf/'env.impl').read_bytes()
+        env=dict(self.env)
+        for name in ('LLM_MODEL','FORCE_ENV'):env.pop(name,None)
+        r=subprocess.run([str(KIT/'install.sh'),'--migrate-backend','--non-interactive','--prefix',str(self.prefix)],
+                         env=env,capture_output=True,text=True,timeout=12)
+        self.assertEqual(r.returncode,0,r.stdout+r.stderr)
+        text=(self.conf/'env').read_text()
+        self.assertIn('http://1.233.219.161:4000',text)
+        self.assertIn('deepseek-v4.1-flash',text)
+        self.assertIn('fake-update-test-key',text)
+        self.assertEqual((self.conf/'env.impl').read_bytes(),other)
+        self.assertEqual(len(list(self.conf.glob('backend-backup.*'))),1)
+        self.assertNotIn('fake-update-test-key',r.stdout+r.stderr)
+
     def test_invalid_combination_does_not_install(self):
         result = self.call("--update", "--profile", "impl")
         self.assertEqual(result.returncode, 2)

@@ -91,3 +91,16 @@ resume만으로 반영된다고 가정하지 않는다. 새 대화를 시작하�
 기존 태스크의 기준 커밋과 명세는 바뀌지 않는다. 실패/중단한 태스크는 --retry로 새 시도를 만들 수 있지만
 이전 시도의 미커밋 코드를 이어받는 기능은 아니다. 새 read_paths·권한 규칙·입력이 필요하면 새로 등록한다.
 기존 성공 검증을 유지한 채 worktree를 수정하지 않는다. 랩미팅 데모는 갱신 후 demo/prepare.py로 새로 준비한다.
+
+## 2026-11 LiteLLM / Qwen 구성
+
+--update는 기존 env를 바꾸지 않는다. 이전 연구실 서버에서 새 기본값으로 옮기려면
+`./install.sh --migrate-backend --non-interactive`를 명시적으로 실행한다. 대상 env를 백업하고
+키/인증 모드와 사용자 값을 유지하며 URL·DeepSeek 모델·컨텍스트를 갱신한다.
+`--profile impl`처럼 프로필을 지정하면 그 env만 갱신한다. qwen 프로필은 Qwen 모델을 사용한다.
+
+새 Qwen 프로필은 `./install.sh --profile qwen --non-interactive`, 기존 프로필의 이전 주소 갱신은
+`./install.sh --migrate-backend --profile qwen --non-interactive`다.
+새 프록시의 기본 인증 모드는 none이며 Claude CLI에 전달하는 litellm-no-auth는 비밀 키가 아닌
+클라이언트용 식별자다. 기존 키 인증 설정은 자동으로 해제하지 않는다.
+프로젝트 규칙도 deepseek-project-update로 비교·적용하고 재개한 메인에 새 역할 규칙을 다시 읽게 한다.

@@ -34,6 +34,7 @@ cp ~/claude-deepseek-worker-kit/config/task.example.json /tmp/deepseek-task.json
   "profile": "",
   "role": "implementer",
   "effort": "max",
+  "max_turns": 120,
   "inputs": [],
   "compute_backend": "local",
   "instructions": "src/durations.py의 parse를 구현한다. 공개 시그니처와 테스트는 바꾸지 않는다. 테스트는 verify에 적힌 캐시 없는 명령으로 실행한다.",
@@ -111,7 +112,7 @@ queued → running → verifying → succeeded
 재시작 후 자동 실행/재시도는 없다. 살아 있는 자식 세션이 남으면 재시도를 거절한다. `surviving_processes`를
 확인하고 `cancel`로 해당 세션을 종료한 후 명시적으로 재시도한다. 정상 SIGINT/SIGTERM도 자식을 정리하고 `interrupted`로 남긴다.
 현재 관리 모드는 **Linux(/proc, WSL2 포함)** 전용이다. 기존 수동 실행 모드의 지원 범위는 유지된다.
-계산 backend는 기본 `local`(현재 컴퓨터/WSL)이다. `compute_backend`를 생략해도 같으며, 관리 모드는 현재 다른 backend를 거절한다.
+코드 작업의 backend는 기본 `local`(현재 컴퓨터/WSL)이다. `compute_backend`를 생략해도 같으며, 관리 모드는 현재 다른 backend를 거절한다.
 LLM 서버는 추론 접속점일 뿐 계산 노드가 아니다. 새 워커 프로세스에는 부모 Claude의 세션 ID 표지만 전달하지 않으며,
 기존 프로필·권한 설정은 유지한다.
 
@@ -142,7 +143,7 @@ LLM 서버는 추론 접속점일 뿐 계산 노드가 아니다. 새 워커 프
 
 ## 외부 검증의 범위
 
-- 워커는 기존 래퍼의 `-p … --output-format json --max-turns 120`으로 실행된다. 정상 종료와 CLI JSON의 성공 응답은
+- 워커는 기존 래퍼의 `-p … --output-format json --max-turns <max_turns>`으로 실행된다. 정상 종료와 CLI JSON의 성공 응답은
   **검증 시작 조건**이다. 모델의 “테스트 통과” 문구로 성공을 결정하지 않는다.
 - 기준 worktree의 파일 해시와 최종 파일을 비교한다. 자체 커밋 여부, Git 인덱스, 편집 도구와 무관하게
   추가·수정·삭제·실행 비트·symlink 변경을 검사한다. 미추적 파일과 **ignored 파일도 포함**한다.
@@ -224,3 +225,14 @@ python3 -B -m unittest discover -s tests -p 'test_worker_task.py' -v
 Python 표준 라이브러리와 Git/Bash가 필요하며 실제 CLI·모델·서버·pytest 설치는 필요하지 않다.
 실제 연결은 별도로 `deepseek-probe` 및 작은 관리 태스크로 확인한다. 프로브는 명시적으로 모델 요청을 보낸다.
 기존 `bench/run.sh`는 선택적인 모델 벤치마크이며 관리 모드의 완료 증거를 대신하지 않는다.
+
+## Compute Job과 턴 예산
+
+`max_turns`는 등록 시 고정하며 기본 120, 범위 1–1000이다. CLI의 턴 제한 오류는
+`worker_turn_limit`으로 기록한다. 이전 시도는 보존하고 명세 변경은 새 태스크로 등록한다.
+
+`role: compute-runner`는 기본 `profile: qwen`을 사용하고 `compute_job`이 필수다.
+실행기가 고정된 명세로 잡을 먼저 실행한 후 실제 결과를 Qwen에 전달한다.
+CPU 모사·SSH GPU 실행은 [COMPUTE_JOBS.md](COMPUTE_JOBS.md)를 따른다.
+Compute Job 실행 실패는 워커의 성공 보고로 덮을 수 없다. compute.result/spec의 해시도 검증하고,
+성공 뒤 결과 파일이 바뀌면 기존 성공 판정은 무효다. 원격 과학 결과의 타당성은 별도의 독립 검사로 판단한다.

@@ -20,14 +20,18 @@ DeepSeek 관리 태스크다. Claude native Agent/Workflow를 조용히 대신 �
    생산자와 같은 repository/base_commit을 사용한다. 리뷰는 .task-inputs/의 복사본을 읽고 reports/에 남긴다.
 8. 실험·결과 분석·문서 초안도 역할별로 맡긴다. 코드나 데이터 의존성은 검증된 inputs로 명시한다.
 
-role: planner/researcher/implementer/test-author/runner/analyst/reviewer.
+role: planner/researcher/implementer/test-author/runner/analyst/reviewer는 기본 DeepSeek에 배정한다.
+GPU/CPU Compute Job 운영은 role=compute-runner와 profile=qwen에 배정한다. 명세에 compute_job을 넣는다.
+작업 명령·대상·경로·자원·검증·예산을 고정한 뒤 실행기가 실제 잡을 실행하며 Qwen은 결과를 보고한다.
+GPU 점유 추측, 수동 SSH·재실행·실험 코드 수정은 Qwen에게 맡기지 않는다. 실패 원인 분석과 코드 변경은 DeepSeek에 위임한다.
 permission_profile 기본 workspace는 필요한 파일 도구·Bash·검색·에이전트 도구를 사전 허용한다.
 외부 입력은 read_paths, 임시 출력은 scratch_paths로 명시한다. read_paths의 데이터는 수정하지 않는다.
 기존 settings.json의 allow/ask/deny를 쓰려면 permissions_file을 지정하고, workspace의 넓은 허용을 추가하지 않으려면 custom 프로필을 쓴다. 기존 CLI allow/ask/deny는 계속 병합된다.
 권한 거절은 permission_denied로 실패하므로 결과의 거절 도구와 설정 경로를 확인한다. 우회 옵션으로 재실행하지 않는다.
 profile은 서버·모델 설정을 고르고 role은 실행 프롬프트를 고른다. 기본 프로필 하나로 모든 역할을 사용할 수 있다.
 effort 기본 max는 서버에 보내는 요청이며 실제 thinking 토큰 수/적용을 보장하지 않는다.
-기본 120턴·1800초와 검증 명령별 300초를 사용하고 작업에 맞게 시간 제한을 명시한다.
+기본 120턴·1800초와 검증 명령별 300초를 사용한다. max_turns(1–1000)와 시간 예산을 명시한다.
+턴 제한 실패는 worker_turn_limit이며 산출물을 성공으로 승격하지 않는다.
 
 ## 격리와 입력
 
@@ -37,7 +41,10 @@ effort 기본 max는 서버에 보내는 요청이며 실제 thinking 토큰 수
 그 외에는 자동 stash/commit하지 않는다. inputs는 생산 태스크의 검증된 파일을 읽기 위한 복사이며 소스 통합이 아니다.
 중간 결과가 변경/재시도되어 고정된 해시와 다르면 소비 태스크를 새로 등록한다.
 
-계산은 local(현재 컴퓨터/보통 WSL)이다. SSH나 원격 GPU 호출은 이 운영 범위에 없다.
+기본 계산 대상은 local(현재 컴퓨터/보통 WSL)이다. 명시된 compute_job만 SSH 호스트에서 계산할 수 있다.
+사용자가 지정한 SSH 별칭·절대 작업 경로·명령·검증·GPU 후보·대기/실행 제한을 고정한다.
+원격 소스를 자동 복사하거나 Git 상태를 바꾸지 않는다. 코드 대응이 필요하면 expected_commit으로 준비된 clean revision을 고정한다.
+자원 대기·GPU별 잠금·프로세스 그룹·연결 단절 lease는 실행기가 관리한다. 다른 사용자의 실행을 중단하지 않는다.
 실패한 worktree/결과를 삭제하거나 자동 merge·push하지 않는다. worktree는 보안 샌드박스가 아니다.
 
 ## 검토와 최종 결정

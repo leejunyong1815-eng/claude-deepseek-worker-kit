@@ -17,4 +17,5 @@
 기존 키트의 template history와 다른 파일은 자동 갱신 대상으로 추정하지 않는다.
 
 수동 메시징은 두 버전에서 유지된다. 관리 모드의 task ID와 기록은 각 상태 디렉터리에 속하므로
-서로 바꾸어 사용하지 않는다. 원격 실행 도우미와 Qwen fallback 설정은 이 버전에 포함하지 않는다.
+서로 바꾸어 사용하지 않는다. 이전 원격 실행 도우미와 Qwen fallback은 자동 이관하지 않는다. 새 Qwen compute-runner와
+명시적 local/SSH Compute Job은 COMPUTE_JOBS.md에 따라 별도로 설정한다. 일반 위임은 DeepSeek를 사용한다.

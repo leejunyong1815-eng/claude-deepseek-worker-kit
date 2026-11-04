@@ -1,8 +1,9 @@
-# Claude + DeepSeek Worker Kit
+# Claude + DeepSeek / Qwen Worker Kit
 
 Claude Code에서 DeepSeek를 서브에이전트로 쓰기 위한 CLI 도구입니다.
-Claude가 작업을 나누고 결과를 검토하며, DeepSeek가 조사, 설계, 구현, 테스트 작성, 실험, 리뷰를 맡습니다.
-모델 추론은 연구실 서버에서, 코드 편집과 실험은 로컬 컴퓨터나 WSL에서 실행합니다.
+Claude가 작업을 나누고 결과를 검토하며, DeepSeek가 조사·설계·구현·테스트·분석·리뷰를 맡습니다.
+Qwen은 지정된 Compute Job의 실행 결과와 자원·상태를 담당합니다. GPU 유휴 확인·대기·잠금·취소는 실행기가 처리합니다.
+코드 작업은 로컬/WSL의 별도 worktree에서 하고, 계산 잡은 명세에 지정한 로컬 컴퓨터나 SSH 호스트에서 실행합니다.
 
 [claude-local-worker-kit](https://github.com/leejunyong1815-eng/claude-local-worker-kit)에서 분리한 버전입니다.
 명령어와 설정 경로가 달라 기존 버전과 함께 설치할 수 있습니다.
@@ -54,18 +55,21 @@ deepseek-doctor
 `--setup-path`는 키트와 Linux용 Claude의 `~/.local/bin` 경로를 등록하는 설정을 `~/.bashrc`에 한 번 추가합니다. 현재 터미널에는 위의 `shell.sh`를 읽어 적용합니다.
 새 터미널부터는 자동으로 적용됩니다. 다른 셸을 쓰는 경우 설치기가 출력한 source 줄을 해당 셸 설정에 추가하세요.
 
-URL, 모델, 컨텍스트는 Enter로 기본값을 사용합니다. API 키는 이 컴퓨터에서 새로 입력합니다.
-키는 숨김 입력으로 받아 `~/.config/deepseek-worker/env`에 권한 `0600`으로 저장하며 Git에는 저장하지 않습니다.
-메인 Claude 계정 로그인과 DeepSeek API 키는 별도입니다.
+URL, 모델, 컨텍스트는 Enter로 기본값을 사용합니다. 현재 연구실 LiteLLM은 키 없이 호출할 수 있어
+새 설치는 `LLM_AUTH_MODE=none`을 사용합니다. 인증이 필요한 서버에서는 `LLM_AUTH_MODE=api_key ./install.sh`로
+설치하고 키를 숨김 입력합니다. 설정은 `~/.config/deepseek-worker/env`에 `0600`으로 저장합니다.
+메인 Claude 계정 로그인과 워커의 서버 인증은 별도입니다.
 
 | 설정 | 기본값 |
 |---|---|
-| `LLM_BASE_URL` | `http://133.186.146.224:8081` |
-| `LLM_MODEL` | `DeepSeek-V4.1-Flash` |
-| `LLM_CONTEXT_WINDOW` | `1048576` (1M) |
+| `LLM_BASE_URL` | `http://1.233.219.161:4000` |
+| `LLM_MODEL` | `deepseek-v4.1-flash` |
+| Qwen 프로필 모델 | `qwen3.8-flash-next` |
+| `LLM_AUTH_MODE` | `none` |
+| `LLM_CONTEXT_WINDOW` | `262144` (256K) |
 
 기본값은 [config/backend.defaults.json](config/backend.defaults.json)에 있습니다.
-컨텍스트 한도와 API 호환성·속도 측정 결과는 [서버 확인 기록](docs/LAB_SERVER.md)을 참고하세요.
+프록시의 컨텍스트 메타데이터와 실제 호환 검사는 [서버 확인 기록](docs/LAB_SERVER.md)을 참고하세요.
 
 서버 연결은 새 컴퓨터에서 별도로 확인합니다. 이 검사는 실제 모델 요청을 보냅니다.
 
@@ -77,7 +81,7 @@ deepseek-probe
 연결 오류는 [문제 해결 문서](docs/TROUBLESHOOTING.md)를 참고하세요.
 
 도구만 먼저 설치하려면 `./install.sh --install-only --setup-path`를 사용합니다.
-자동 설치는 `LLM_API_KEY`를 환경변수로 전달하고 `./install.sh --non-interactive`를 실행합니다.
+자동 설치는 `./install.sh --non-interactive`를 실행합니다. 키 인증 서버에서는 `LLM_AUTH_MODE=api_key`와 `LLM_API_KEY`를 환경변수로 전달합니다.
 새 설정을 만들 때 URL, 모델, 컨텍스트도 같은 이름의 환경변수로 지정할 수 있습니다. 기존 설정 파일은 유지됩니다.
 다른 서버를 쓰려면 Anthropic Messages API, SSE, 도구 호출을 지원해야 하며 `LLM_BASE_URL` 끝에는 `/v1`을 붙이지 않습니다.
 
@@ -111,8 +115,19 @@ deepseek-main
 | `runner` | 로컬 테스트·실험 실행 |
 | `analyst` | 결과 집계와 분석 |
 | `reviewer` | 별도 태스크에서 코드 리뷰 |
+| `compute-runner` | Qwen: 로컬/SSH Compute Job 운영 보고 |
 
-역할은 태스크 명세의 `role`로 선택합니다. 기본 프로필 하나로 모든 역할을 사용할 수 있습니다.
+Qwen 프로필은 한 번 설치합니다. 일반 역할은 계속 기본 DeepSeek 프로필을 사용합니다.
+
+```bash
+./install.sh --profile qwen --non-interactive
+```
+
+`compute-runner`는 프로필을 생략하면 `qwen`을 선택합니다. 명시된 잡은 실행기가 먼저 실행·검증하고,
+Qwen은 고정된 결과를 읽어 보고서를 씁니다. 모델이 GPU 상태를 추측하거나 대기 중 계속 추론하지 않습니다.
+CPU 모사와 SSH GPU 잡 명세는 [Compute Job 문서](docs/COMPUTE_JOBS.md)에 있습니다.
+
+역할은 태스크 명세의 `role`로 선택합니다. 일반 역할은 기본 DeepSeek 프로필을 공유합니다. Compute Job은 Qwen 프로필을 사용합니다.
 연결 설정을 나눠야 한다면 `./install.sh --profile review --non-interactive`처럼 프로필을 추가합니다.
 
 ## 태스크 실행과 검증
@@ -133,9 +148,10 @@ deepseek-main
 `status`와 `result` 조회 시 파일 해시를 다시 확인합니다. 검증한 코드가 바뀌면 기존 성공 결과는 무효가 됩니다.
 리뷰 태스크도 같은 검사를 거치지만, 리뷰 내용의 타당성은 메인이 판단합니다.
 
-기본 실행 제한은 120턴·1800초, 검증은 명령별 300초입니다. 시간 제한은 태스크 명세에서 바꿀 수 있습니다.
-기본 effort는 `max`로 요청합니다. 현재 서버는 Anthropic 요청을 받지만 실제 effort 적용은 확인되지 않았고,
-OpenAI 경로의 `reasoning_effort=low/high/max`는 거절됐습니다. 자세한 내용은 [측정 기록](docs/LAB_SERVER.md)에 있습니다.
+기본 실행 제한은 120턴·1800초, 검증은 명령별 300초입니다. 명세의 `max_turns`(1–1000),
+`timeout`, `verify_timeout`으로 조정합니다. Compute Job은 별도의 대기·실행·검증 예산을 사용합니다.
+기본 effort는 `max`로 요청합니다. 현재 서버의 Anthropic 경로에서 thinking 블록과 effort 필드 수용을 확인했습니다.
+요청한 effort의 실제 적용량까지 증명한 것은 아닙니다. 자세한 내용은 [측정 기록](docs/LAB_SERVER.md)에 있습니다.
 
 원본의 미커밋 변경은 worktree에 포함되지 않습니다. 필요한 입력이 기준 커밋에 있는지 먼저 확인해야 합니다.
 실패·취소·중단된 worktree와 로그는 보존하며, 자동 stash·commit·merge·push·삭제는 하지 않습니다.
@@ -184,6 +200,16 @@ git pull --ff-only
 ```
 
 기존 API 키, 모델, 컨텍스트 설정을 유지하고 실행 파일과 프롬프트를 갱신합니다.
+기존 설정의 주소·모델·컨텍스트도 유지되므로, 이전 연구실 서버에서 옮길 때는 아래를 추가 실행합니다.
+선택한 프로필의 키와 사용자 설정을 보존하고 이전 env를 백업합니다.
+
+```bash
+./install.sh --migrate-backend --non-interactive
+./install.sh --profile qwen --non-interactive
+# 이미 설치된 qwen / impl 같은 프로필도 이전 서버를 가리키면 해당 프로필을 명시한다.
+./install.sh --migrate-backend --profile qwen --non-interactive
+```
+
 프로젝트에 복사한 규칙은 별도로 확인한 뒤 반영합니다.
 
 ```bash
@@ -205,5 +231,6 @@ python3 -B demo/rehearse.py       # 서버 없이 랩미팅 데모 실행
 두 명령 모두 실제 모델을 호출하지 않습니다. 실제 연동은 `deepseek-probe`와 작은 관리 태스크로 확인합니다.
 랩미팅 실행 절차와 입력할 프롬프트는 [demo/README.md](demo/README.md)에 있습니다.
 
-원격 GPU 실행, 모델 자동 선택·fallback, 웹 UI, 자동 PR 생성은 지원하지 않습니다.
+원격 GPU는 명시된 SSH Compute Job으로 지원합니다. 원격 소스 자동 배포·클러스터 예약 서비스,
+모델 자동 선택·fallback, 웹 UI, 자동 PR 생성은 제공하지 않습니다.
 남은 작업은 [PLAN.md](PLAN.md), 원본 코드 출처는 [UPSTREAM.md](UPSTREAM.md)를 참고하세요.

@@ -26,11 +26,15 @@ fi
 source "$ENV_FILE"
 
 : "${LLM_BASE_URL:?LLM_BASE_URL 이 비어 있습니다 ($ENV_FILE)}"
-: "${LLM_API_KEY:?LLM_API_KEY 가 비어 있습니다 ($ENV_FILE)}"
+case "${LLM_AUTH_MODE:-api_key}" in
+    api_key) : "${LLM_API_KEY:?LLM_API_KEY is required}"; WORKER_AUTH_TOKEN="$LLM_API_KEY" ;;
+    none) WORKER_AUTH_TOKEN="litellm-no-auth" ;; # Client-side token only; the proxy is explicitly keyless.
+    *) echo 'invalid LLM_AUTH_MODE' >&2; exit 2 ;;
+esac
 : "${LLM_MODEL:?LLM_MODEL 이 비어 있습니다 ($ENV_FILE)}"
 : "${LLM_CONTEXT_WINDOW:?LLM_CONTEXT_WINDOW is required}"
 [[ "$LLM_CONTEXT_WINDOW" =~ ^[1-9][0-9]*$ ]] || { echo 'invalid context limit' >&2; exit 2; }
-for value in "$LLM_BASE_URL" "$LLM_API_KEY" "$LLM_MODEL"; do
+for value in "$LLM_BASE_URL" "$WORKER_AUTH_TOKEN" "$LLM_MODEL"; do
     [[ "$value" != *CHANGE_ME* && "$value" != none && "$value" != dummy ]] || { echo 'lab backend is unconfigured' >&2; exit 2; }
 done
 EFFORT="${DEEPSEEK_WORKER_EFFORT:-${LLM_EFFORT:-max}}"
@@ -38,7 +42,7 @@ case "$EFFORT" in low|high|max) ;; *) echo 'invalid reasoning effort' >&2; exit 
 ROLE="${DEEPSEEK_WORKER_ROLE:-${WORKER_ROLE:-implementer}}"
 [ "$ROLE" != impl ] || ROLE=implementer
 [ -n "$ROLE" ] || ROLE=implementer
-case "$ROLE" in planner|researcher|implementer|test-author|runner|analyst|reviewer) ;; *) echo 'invalid worker role' >&2; exit 2;; esac
+case "$ROLE" in planner|researcher|implementer|test-author|runner|analyst|reviewer|compute-runner) ;; *) echo 'invalid worker role' >&2; exit 2;; esac
 # Managed specs are immutable; prevent trailing CLI arguments overriding routing/effort.
 if [ "${DEEPSEEK_TASK_MANAGED:-0}" = 1 ]; then
     for arg in "$@"; do
@@ -85,7 +89,7 @@ exec env \
   -u CLAUDE_CODE_MAX_OUTPUT_TOKENS \
   -u CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL \
   ANTHROPIC_BASE_URL="$LLM_BASE_URL" \
-  ANTHROPIC_AUTH_TOKEN="$LLM_API_KEY" \
+  ANTHROPIC_AUTH_TOKEN="$WORKER_AUTH_TOKEN" \
   ANTHROPIC_MODEL="$LLM_MODEL" \
   ANTHROPIC_DEFAULT_OPUS_MODEL="$LLM_MODEL" \
   ANTHROPIC_DEFAULT_SONNET_MODEL="$LLM_MODEL" \

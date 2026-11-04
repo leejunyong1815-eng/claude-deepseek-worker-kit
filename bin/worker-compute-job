@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+"""Run an explicit local/SSH GPU job. Managed tasks supply the frozen job spec."""
+import argparse
+import json
+import os
+from pathlib import Path
+import selectors
+import shlex
+import signal
+import subprocess
+import sys
+import time
+import uuid
+from _worker_compute import normalize, atomic, checksum
+
+
+def run(spec, result):
+    job = normalize(spec)
+    run_id = 'c-' + uuid.uuid4().hex
+    source = Path(__file__).with_name('_worker_compute.py').read_text()
+    if job['transport'] == 'ssh':
+        command = ['ssh', '-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes',
+                   '-o', 'ConnectTimeout=10', '-o', 'ServerAliveInterval=5', '-o', 'ServerAliveCountMax=2',
+                   '--', job['ssh_host'], 'python3 -u -c ' + shlex.quote(source)]
+    else:
+        command = [sys.executable, '-u', '-c', source]
+    result = Path(result).expanduser().resolve()
+    result.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    state = dict(run_id=run_id, state='starting', transport=job['transport'],
+                 ssh_host=job.get('ssh_host'), spec_digest=checksum(job), started_at=time.time())
+    # Exclusive creation also prevents concurrent standalone invocations overwriting a result.
+    with result.open('x') as initial:
+        os.chmod(result, 0o600)
+        json.dump(state, initial)
+        initial.write('\n')
+    cancelled = [False]
+    previous = {}
+    for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        previous[sig] = signal.signal(sig, lambda *_: cancelled.__setitem__(0, True))
+    process = None
+    try:
+        with result.with_suffix('.transport.log').open('xb') as errors:
+            process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=errors,
+                                       text=True, bufsize=1, start_new_session=True)
+            process.stdin.write(json.dumps({'job':job, 'run_id':run_id}) + '\n')
+            process.stdin.flush()
+            selector = selectors.DefaultSelector()
+            selector.register(process.stdout, selectors.EVENT_READ)
+            heartbeat = time.monotonic()
+            deadline = heartbeat + job['wait_timeout'] + job['timeout'] + len(job['verify']) * job['verify_timeout'] + 30
+            cancellation_sent = None
+            with process.stdout:
+                while True:
+                    current = time.monotonic()
+                    if current >= deadline:
+                        cancelled[0] = True
+                    if current >= heartbeat and process.poll() is None:
+                        try:
+                            process.stdin.write(json.dumps({'heartbeat':True, 'cancel':cancelled[0]}) + '\n')
+                            process.stdin.flush()
+                        except (OSError, ValueError):
+                            pass
+                        heartbeat = current + min(1, job['heartbeat_timeout'] / 3)
+                    if cancelled[0] and cancellation_sent is None:
+                        cancellation_sent = current
+                        try:
+                            process.stdin.write('{"cancel":true}\n')
+                            process.stdin.flush()
+                        except (OSError, ValueError):
+                            pass
+                    for key, _ in selector.select(.1):
+                        line = key.fileobj.readline()
+                        if not line:
+                            selector.unregister(key.fileobj)
+                            continue
+                        update = json.loads(line)
+                        if update.get('run_id') != run_id or update.get('spec_digest') != checksum(job):
+                            raise ValueError('executor identity mismatch')
+                        state.update(update)
+                        atomic(result, state)
+                    if process.poll() is not None and not selector.get_map():
+                        break
+                    if cancellation_sent and current - cancellation_sent > job['heartbeat_timeout'] + 5:
+                        # Closing SSH stdin revokes the lease; never kill remote processes by name.
+                        process.stdin.close()
+                        process.terminate()
+                        break
+            selector.close()
+            try:
+                process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+            if state.get('state') not in {'succeeded','failed','cancelled'}:
+                state.update(state='interrupted', reason='transport_lost', remote_cleanup_confirmed=False)
+            else:
+                state['remote_cleanup_confirmed'] = True
+            if cancelled[0] and state['state'] == 'succeeded':
+                state.update(state='cancelled', reason='cancelled')
+            state['transport_exit_code'] = process.returncode
+            if process.returncode and state['state'] == 'succeeded':
+                state.update(state='failed', reason='transport_exit_nonzero')
+    except (OSError, ValueError, subprocess.SubprocessError):
+        state.update(state='interrupted', reason='transport_error', remote_cleanup_confirmed=False)
+    finally:
+        if process:
+            if process.stdin and not process.stdin.closed:
+                process.stdin.close()
+            if process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
+        state['finished_at'] = time.time()
+        atomic(result, state)
+    return state
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument('spec', type=Path)
+    p.add_argument('--result', type=Path, required=True)
+    args = p.parse_args()
+    result = run(json.loads(args.spec.read_text()), args.result)
+    print(json.dumps(result, indent=2))
+    return 0 if result['state'] == 'succeeded' else 1
+
+
+if __name__ == '__main__':
+    try:
+        sys.exit(main())
+    except (ValueError, OSError):
+        print('worker-compute-job: invalid job or result path; details omitted', file=sys.stderr)
+        sys.exit(2)
