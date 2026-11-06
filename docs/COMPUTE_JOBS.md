@@ -82,7 +82,8 @@ nvidia-smi의 메모리·사용률과 compute process 목록을 함께 확인한
 
 태스크 시도 폴더에 compute.spec.json, compute.result.json, compute.stdout.log,
 compute.stderr.log를 보존한다. status/result의 compute_result에 실제 잡 종료 코드, 검증 코드,
-선택 GPU, 원격 로그 경로, 실행 시간과 실패 이유가 들어간다. Qwen 보고와 무관하게 검사한다.
+선택 GPU, 원격 로그 경로, 실행 시간과 실패 이유가 들어간다. Qwen 보고와 무관하게 검사한다. 로컬 잡은 해당 run의 stdout/stderr·검증 로그와 원본 결과 파일만
+Qwen의 읽기 경로에 추가하며 파일 도구 수정은 허용하지 않는다. 다른 run이나 원격 경로는 포함하지 않는다.
 성공 뒤 로컬 compute 명세/결과가 바뀌어도 성공은 무효다.
 
 잡 stdout/stderr와 검증 로그는 실행 컴퓨터의

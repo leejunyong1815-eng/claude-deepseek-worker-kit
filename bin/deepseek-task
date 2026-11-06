@@ -284,9 +284,11 @@ class Tasks:
         if not isinstance(profile, str) or (profile and not re.fullmatch(r"[A-Za-z0-9_-]+", profile)):
             raise ValueError("invalid profile")
         role = raw.get("role", "implementer")
-        effort = raw.get("effort", "max")
-        if not isinstance(role, str) or not isinstance(effort, str) or role not in ROLES or effort not in {"low", "high", "max"}:
-            raise ValueError("invalid role or effort")
+        effort = raw.get("effort")  # Legacy input retained in the immutable spec; never forwarded.
+        if not isinstance(role, str) or role not in ROLES:
+            raise ValueError("invalid role")
+        if effort is not None and (not isinstance(effort, str) or effort not in {"low", "high", "max"}):
+            raise ValueError("invalid legacy effort")
         max_turns = raw.get("max_turns", 120)
         if type(max_turns) is not int or not 1 <= max_turns <= 1000:
             raise ValueError("max_turns must be an integer in [1, 1000]")
@@ -372,7 +374,7 @@ class Tasks:
         atomic_json(folder / "state.json", dict(task_id=task, state="queued", reason=
                     "uncommitted_dependency" if has_dirty and depends else None,
                     created_at=now(), attempts=[], current_attempt=None, base_commit=base,
-                    profile=profile, role=role, effort=effort, inputs=spec["inputs"], original_dirty_at_submit=has_dirty,
+                    profile=profile, role=role, effort=None, requested_effort=effort, effort_forwarded=False, inputs=spec["inputs"], original_dirty_at_submit=has_dirty,
                     uncommitted_changes_included=False, spec_digest=digest(spec)))
         if has_dirty:
             print("Original checkout is dirty. Only the recorded base commit is included; uncommitted changes are excluded.", file=sys.stderr)
@@ -450,7 +452,7 @@ class Tasks:
                          attempts=old["attempts"] + [attempt], state="running", reason=None,
                          base_commit=spec["base_commit"], profile=spec["profile"], worktree=str(wt),
                          compute_backend=spec.get("compute_backend", "local"),
-                         role=spec["role"], effort=spec["effort"], max_turns=spec.get("max_turns", 120), inputs=spec.get("inputs", []),
+                         role=spec["role"], effort=None, requested_effort=spec.get("effort"), effort_forwarded=False, max_turns=spec.get("max_turns", 120), inputs=spec.get("inputs", []),
                          worker_name=f"task-{task[-12:]}-{attempt}",
                          original_dirty_at_submit=old["original_dirty_at_submit"],
                          original_dirty_at_run=dirty(spec["repository"]), uncommitted_changes_included=False,
@@ -495,7 +497,8 @@ class Tasks:
             env["DEEPSEEK_WORKER_PROFILE"] = spec["profile"]
             env["DEEPSEEK_WORKER_NAME"] = state["worker_name"]
             env["DEEPSEEK_WORKER_ROLE"] = spec["role"]
-            env["DEEPSEEK_WORKER_EFFORT"] = spec["effort"]
+            for name in ("DEEPSEEK_WORKER_EFFORT", "LLM_EFFORT", "CLAUDE_CODE_EFFORT_LEVEL"):
+                env.pop(name, None)
             env["DEEPSEEK_TASK_MANAGED"] = "1"
             env.pop("DEEPSEEK_WORKER_SETTINGS", None)
             if settings_value is not None:
@@ -621,7 +624,16 @@ class Tasks:
                     raise ValueError("compute specification/result identity changed")
                 update(compute_job_exit_code=rc, compute_job_timed_out=timed_out, compute_result=compute_summary,
                        compute_result_digest=digest(compute_summary), phase="worker")
-                policy = dict(policy, read_paths=policy["read_paths"] + [str(result_path)])
+                compute_reads = [str(result_path)]
+                if job["transport"] == "local" and compute_summary.get("run_id"):
+                    # Only this run's completed local logs; SSH paths belong to the remote host.
+                    log_root = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "deepseek-worker/compute" / compute_summary["run_id"]
+                    for key, name in (("stdout_path", "stdout.log"), ("stderr_path", "stderr.log"),
+                                      ("verification_log", "verification.log"), ("remote_result_path", "result.json")):
+                        path = log_root / name
+                        if compute_summary.get(key) == str(path) and path.is_file() and path.resolve() == path:
+                            compute_reads.append(str(path))
+                policy = dict(policy, read_paths=policy["read_paths"] + compute_reads)
             settings_value = build_settings(policy, wt, spec["repository"], spec["protected_paths"])
             if settings_value is not None:
                 atomic_json(settings_path, settings_value)
@@ -629,7 +641,7 @@ class Tasks:
                    worker_settings_path=str(settings_path) if settings_value is not None else None,
                    worker_settings_digest=digest(settings_value) if settings_value is not None else None,
                    permission_denial_count=0, permission_denied_tools=[])
-            prompt = (f"Managed task {task}, attempt {attempt}. Role: {spec['role']}. Requested effort: {spec['effort']}. Purpose: {spec['purpose']}\n"
+            prompt = (f"Managed task {task}, attempt {attempt}. Role: {spec['role']}. Purpose: {spec['purpose']}\n"
                       "Compute backend: local (this computer, often WSL). Run the assigned implementation and tests locally. "
                       "The LLM inference server is not the compute backend. Do not use SSH or remote-* for this task.\n"
                       f"Your assigned worktree is {wt}, detached at {spec['base_commit']}. "

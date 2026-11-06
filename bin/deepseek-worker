@@ -37,13 +37,11 @@ esac
 for value in "$LLM_BASE_URL" "$WORKER_AUTH_TOKEN" "$LLM_MODEL"; do
     [[ "$value" != *CHANGE_ME* && "$value" != none && "$value" != dummy ]] || { echo 'lab backend is unconfigured' >&2; exit 2; }
 done
-EFFORT="${DEEPSEEK_WORKER_EFFORT:-${LLM_EFFORT:-max}}"
-case "$EFFORT" in low|high|max) ;; *) echo 'invalid reasoning effort' >&2; exit 2;; esac
 ROLE="${DEEPSEEK_WORKER_ROLE:-${WORKER_ROLE:-implementer}}"
 [ "$ROLE" != impl ] || ROLE=implementer
 [ -n "$ROLE" ] || ROLE=implementer
 case "$ROLE" in planner|researcher|implementer|test-author|runner|analyst|reviewer|compute-runner) ;; *) echo 'invalid worker role' >&2; exit 2;; esac
-# Managed specs are immutable; prevent trailing CLI arguments overriding routing/effort.
+# Managed specs are immutable; prevent trailing CLI arguments overriding routing and permissions.
 if [ "${DEEPSEEK_TASK_MANAGED:-0}" = 1 ]; then
     for arg in "$@"; do
         case "$arg" in --effort|--effort=*|--model|--model=*|--settings|--settings=*|--permission-mode|--permission-mode=*|--tools|--tools=*|--allowedTools|--allowedTools=*|--disallowedTools|--disallowedTools=*|--dangerously-skip-permissions|--allow-dangerously-skip-permissions) echo 'managed model/effort/permission override refused' >&2; exit 2;; esac
@@ -76,6 +74,7 @@ if [ "${DEEPSEEK_TASK_MANAGED:-0}" = 1 ] && [ -n "${DEEPSEEK_WORKER_SETTINGS:-}"
     TOOLS=(--tools default)
 fi
 
+# Legacy profile/task effort values are ignored; let Claude and the backend choose defaults.
 # 모든 모델 계층(opus/sonnet/haiku/fable, 서브에이전트)을 같은 로컬 모델로 묶는다.
 # 그래야 제목 생성 등 백그라운드 호출이 서버가 모르는 모델명으로 나가지 않는다.
 exec env \
@@ -84,6 +83,9 @@ exec env \
   -u CLAUDE_CODE_USE_VERTEX \
   -u CLAUDE_CODE_USE_FOUNDRY \
   -u MAX_THINKING_TOKENS \
+  -u CLAUDE_CODE_EFFORT_LEVEL \
+  -u DEEPSEEK_WORKER_EFFORT \
+  -u LLM_EFFORT \
   -u ANTHROPIC_SMALL_FAST_MODEL \
   -u CLAUDE_CODE_AUTO_COMPACT_WINDOW \
   -u CLAUDE_CODE_MAX_OUTPUT_TOKENS \
@@ -98,7 +100,6 @@ exec env \
   CLAUDE_CODE_SUBAGENT_MODEL="$LLM_MODEL" \
   CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1 \
   CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
-  CLAUDE_CODE_EFFORT_LEVEL="$EFFORT" \
   CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS="${LLM_DISABLE_BETAS:-1}" \
   DISABLE_PROMPT_CACHING="${LLM_DISABLE_PROMPT_CACHING:-0}" \
   ${LLM_CONTEXT_WINDOW:+CLAUDE_CODE_MAX_CONTEXT_TOKENS="$LLM_CONTEXT_WINDOW"} \
@@ -109,7 +110,6 @@ exec env \
   ANTHROPIC_DEFAULT_OPUS_MODEL_NAME="$LLM_MODEL (local)" \
   claude \
     --model "$LLM_MODEL" \
-    --effort "$EFFORT" \
     --name "$WORKER_NAME" \
     "${SETTINGS[@]}" \
     "${TOOLS[@]}" \

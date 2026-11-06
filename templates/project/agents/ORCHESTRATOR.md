@@ -13,7 +13,7 @@ DeepSeek 관리 태스크다. Claude native Agent/Workflow를 조용히 대신 �
 4. test-author는 candidate-tests/에 초안을 작성하게 한다. 채택 여부는 메인이 판단한다.
    보호된 tests/나 검증 스크립트의 교체/약화를 위임하지 않는다. 필요한 독립 검사와 기준 커밋을 준비한다.
 5. JSON 명세를 deepseek-task submit으로 등록하고 반환 ID를 run한다. /peers에 떠 있는 세션이 없어도 된다.
-   명세에는 목적·지시/task_file·repository·base_commit·profile·role·effort·references·allowed_paths·protected_paths·
+   명세에는 목적·지시/task_file·repository·base_commit·profile·role·references·allowed_paths·protected_paths·
    verify·timeout·verify_timeout을 넣는다. 연결 태스크는 inputs를 추가한다.
 6. 독립 태스크는 서로 다른 ID로 병렬 실행한다. 서버 처리량은 아직 측정되지 않았으므로 무제한 시작하지 않는다.
 7. 구현 뒤 reviewer를 별도 태스크로 실행한다. inputs에 성공한 생산 task ID와 실제 변경 파일 경로를 넣는다.
@@ -29,7 +29,8 @@ permission_profile 기본 workspace는 필요한 파일 도구·Bash·검색·�
 기존 settings.json의 allow/ask/deny를 쓰려면 permissions_file을 지정하고, workspace의 넓은 허용을 추가하지 않으려면 custom 프로필을 쓴다. 기존 CLI allow/ask/deny는 계속 병합된다.
 권한 거절은 permission_denied로 실패하므로 결과의 거절 도구와 설정 경로를 확인한다. 우회 옵션으로 재실행하지 않는다.
 profile은 서버·모델 설정을 고르고 role은 실행 프롬프트를 고른다. 기본 프로필 하나로 모든 역할을 사용할 수 있다.
-effort 기본 max는 서버에 보내는 요청이며 실제 thinking 토큰 수/적용을 보장하지 않는다.
+effort는 생략한다. 이전 명세/프로필의 effort는 보존하지만 워커 CLI로 전달하지 않는다.
+CLI가 자체 HTTP 기본값을 넣는 동작은 별개다.
 기본 120턴·1800초와 검증 명령별 300초를 사용한다. max_turns(1–1000)와 시간 예산을 명시한다.
 턴 제한 실패는 worker_turn_limit이며 산출물을 성공으로 승격하지 않는다.
 

@@ -20,7 +20,7 @@ class BackendTests(unittest.TestCase):
         mock.mkdir()
         (mock / 'claude').write_text('''#!/usr/bin/env python3
 import json,os,sys
-print(json.dumps({'args': sys.argv[1:], 'env': {k:v for k,v in os.environ.items() if k.startswith(('ANTHROPIC_', 'CLAUDE_CODE_')) or k == 'MAX_THINKING_TOKENS'}}))
+print(json.dumps({'args': sys.argv[1:], 'env': {k:v for k,v in os.environ.items() if k.startswith(('ANTHROPIC_', 'CLAUDE_CODE_')) or k in ('MAX_THINKING_TOKENS','LLM_EFFORT','DEEPSEEK_WORKER_EFFORT')}}))
 ''')
         (mock / 'curl').write_text('#!/bin/sh\ntouch "$NETWORK_MARKER"\nexit 99\n')
         for p in mock.iterdir():
@@ -85,7 +85,8 @@ print(json.dumps({'args': sys.argv[1:], 'env': {k:v for k,v in os.environ.items(
         p = subprocess.run([str(self.prefix / 'deepseek-worker'), '-p', 'hi'], env=self.env,
                            text=True, capture_output=True, check=True)
         data = json.loads(p.stdout)
-        self.assertEqual(data['args'][data['args'].index('--effort') + 1], 'max')
+        self.assertNotIn('--effort', data['args'])
+        self.assertNotIn('CLAUDE_CODE_EFFORT_LEVEL', data['env'])
         self.assertEqual(data['env']['ANTHROPIC_BASE_URL'], 'https://lab.invalid/anthropic')
         for tier in ('OPUS', 'SONNET', 'HAIKU', 'FABLE'):
             self.assertEqual(data['env'][f'ANTHROPIC_DEFAULT_{tier}_MODEL'], 'lab-flash-alias')
@@ -101,7 +102,8 @@ print(json.dumps({'args': sys.argv[1:], 'env': {k:v for k,v in os.environ.items(
         prompt = data['args'][data['args'].index('--append-system-prompt') + 1]
         self.assertIn('Independent reviewer', prompt)
         self.assertNotIn('Implementer discipline', prompt)
-        self.assertEqual(data['env']['CLAUDE_CODE_EFFORT_LEVEL'], 'high')
+        self.assertNotIn('CLAUDE_CODE_EFFORT_LEVEL', data['env'])
+        self.assertNotIn('--effort', data['args'])
 
     def test_orchestrator_does_not_inherit_worker_model_or_reasoning_settings(self):
         self.install('--install-only')
@@ -115,6 +117,23 @@ print(json.dumps({'args': sys.argv[1:], 'env': {k:v for k,v in os.environ.items(
                      'CLAUDE_CODE_EFFORT_LEVEL', 'CLAUDE_CODE_MAX_CONTEXT_TOKENS', 'MAX_THINKING_TOKENS',
                      'CLAUDE_CODE_SUBAGENT_MODEL_FORCE','CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL','CLAUDE_CODE_MAX_OUTPUT_TOKENS'):
             self.assertNotIn(name, data['env'])
+
+    def test_legacy_profiles_and_inherited_effort_do_not_reach_either_model(self):
+        self.install('--non-interactive')
+        self.install('--profile', 'qwen', '--non-interactive')
+        for name in ('env','env.qwen'):
+            with (self.conf/name).open('a') as f:
+                f.write('export LLM_EFFORT=max\n')
+        before={p.name:p.read_bytes() for p in self.conf.glob('env*')}
+        self.install('--update')
+        self.assertEqual(before,{p.name:p.read_bytes() for p in self.conf.glob('env*')})
+        env=dict(self.env, LLM_EFFORT='max', DEEPSEEK_WORKER_EFFORT='high',
+                 CLAUDE_CODE_EFFORT_LEVEL='low', MAX_THINKING_TOKENS='4096')
+        for name in ('deepseek-worker','qwen-worker'):
+            data=json.loads(subprocess.check_output([str(self.prefix/name),'-p','hi'],env=env,text=True))
+            self.assertNotIn('--effort',data['args'])
+            for key in ('LLM_EFFORT','DEEPSEEK_WORKER_EFFORT','CLAUDE_CODE_EFFORT_LEVEL','MAX_THINKING_TOKENS'):
+                self.assertNotIn(key,data['env'])
 
     def test_managed_effort_override_and_profile_traversal_refused(self):
         self.install('--non-interactive', config=True)
@@ -154,10 +173,36 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(result, 0)
         first, continuation, stream = [json.loads(r.data) for r in self.requests]
         self.assertEqual(first['model'], 'exact-lab-id')
-        self.assertEqual(first['output_config']['effort'], 'max')
+        for body in (first, continuation, stream):
+            self.assertNotIn('effort', body.get('output_config', {}))
         self.assertEqual(continuation['messages'][1]['content'], content)
         self.assertTrue(stream['stream'])
         self.assertNotIn('offline-only-key', str(first))
+
+    def test_benchmark_only_sends_effort_when_that_diagnostic_is_explicit(self):
+        import contextlib,io,runpy
+        from unittest.mock import patch
+        checker=runpy.run_path(str(KIT/'bench/litellm_check.py'))
+        bodies=[]
+        class Opener:
+            def open(self,request,timeout):
+                body=json.loads(request.data);bodies.append(body)
+                value={'content':[{'type':'text','text':'LAB_EFFORT_OK'}]} if 'output_config' in body else {}
+                return io.BytesIO(json.dumps(value).encode())
+        with tempfile.TemporaryDirectory() as tmp:
+            output=Path(tmp)/'result.json'
+            for extra in ([],['--check','messages_effort']):
+                bodies.clear()
+                argv=['litellm_check','--base-url','https://lab.invalid','--family','qwen3.8-flash-next','--output',str(output),*extra]
+                with patch('urllib.request.build_opener',return_value=Opener()), patch('sys.argv',argv), \
+                     patch.dict(os.environ,{'LLM_API_KEY':''}), contextlib.redirect_stdout(io.StringIO()):
+                    checker['main']()
+                if extra:
+                    self.assertEqual([b['output_config']['effort'] for b in bodies],['max'])
+                else:
+                    self.assertTrue(bodies)
+                    self.assertTrue(all('effort' not in b.get('output_config',{}) for b in bodies))
+                    self.assertNotIn('messages_effort',[r['check'] for r in json.loads(output.read_text())['checks']])
 
     def test_probe_rejects_missing_tool_call(self):
         with self.assertRaisesRegex(ValueError, 'no tool_use'):

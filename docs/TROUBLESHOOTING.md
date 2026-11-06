@@ -9,7 +9,7 @@
 - 401/403: 키와 서버 권한을 관리자에게 확인한다. 키를 채팅·로그·GitHub issue에 붙이지 않는다.
 - 모델/컨텍스트 오류: 실제 등록 ID와 요청당 한도를 사용한다. 공식 API의 별칭이나 1M 한도를 가정하지 않는다.
 - `/v1/messages`/SSE/tool_result 오류: Anthropic 호환 endpoint인지 확인한다. OpenAI 전용 URL은 지원하지 않는다.
-- effort 거부: gateway가 `output_config.effort`를 지원하는지 확인한다. 필요하면 새 명세의 effort를 high로 명시한다.
+- effort 거부: 키트는 effort 옵션·환경변수를 전달하지 않는다. 기존 env의 LLM_EFFORT 값도 적용하지 않는다. CLI가 기본 HTTP effort를 넣는 경우가 있으므로 CLI 버전과 gateway의 요청 호환성을 확인한다.
   HTTP 200만으로 max가 실제 적용됐다고 판단하지 않는다. thinking.budget_tokens로 상한을 강제한다고 주장하지 않는다.
 - 워커 권한 거부: 최신 버전으로 --update한 뒤 result의 permission_denied_tools와 worker_settings_path를 확인한다. 기본 workspace 프로필은 일반 도구를 허용하지만 기존 deny/ask가 우선한다. 외부 데이터는 read_paths로 지정하고, 명시적 제안 규칙은 permissions_file로 등록한다. 자세한 내용은 WORKER_PERMISSIONS.md를 따른다.
 - 작업 실패: `deepseek-task result <ID>`의 reason·워커/검증 종료 코드·timeout·로그를 확인한다.

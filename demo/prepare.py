@@ -53,7 +53,7 @@ def prepare(workspace, profile=None, mode="live"):
     for task, module, test in (("A", "precondition", "test_precondition.py"), ("B", "readout", "test_readout.py")):
         relative = f"src/labdemo/{module}.py"
         spec = dict(purpose=f"Lab demo {run_id}: task {task} ({module})", repository=str(workspace),
-                    base_commit="HEAD", profile=profile, role="implementer", effort="max", compute_backend="local",
+                    base_commit="HEAD", profile=profile, role="implementer", compute_backend="local",
                     instructions=f"Implement only {relative} according to its docstring. Run the exact verify command. "
                     "Use this worktree's local CPU only (WSL is expected). Do not use SSH, remote-* or GPUs. "
                     "Do not edit tests, tools, configs or other source modules. Leave code uncommitted. "
@@ -91,7 +91,7 @@ conditioning and probability-distribution fidelity must be labeled as such.
              'cd "$(dirname "$(readlink -f "$0")")"\n'
              f'export ORCHESTRATOR_NAME="lab-demo-{run_id}"\n'
              f"exec {shlex.quote(str(KIT / 'bin/deepseek-main'))} "
-             '--model "${DEMO_ORCHESTRATOR_MODEL:-claude-fable-5-1}" --effort high '
+             '--model "${DEMO_ORCHESTRATOR_MODEL:-claude-fable-5-1}" '
              '--append-system-prompt "$(cat DEMO_ORCHESTRATOR.md)" "$@"\n')
     (workspace / "start.sh").write_text(start)
     (workspace / "start.sh").chmod(0o755)

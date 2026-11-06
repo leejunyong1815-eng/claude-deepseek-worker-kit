@@ -54,10 +54,9 @@ def main():
         data = request('/v1/models')
         print(json.dumps([m['id'] for m in data.get('data', [])]))
         return 0
-    print('Explicit API check: text, SSE, thinking/effort and tool-result continuation.')
+    print('Explicit API check: text, SSE, thinking and tool-result continuation (no effort override).')
     common = dict(model=settings['LLM_MODEL'], max_tokens=8192,
-                  thinking={'type': 'enabled', 'budget_tokens': 4096},
-                  output_config={'effort': settings.get('LLM_EFFORT', 'max')})
+                  thinking={'type': 'enabled', 'budget_tokens': 4096})
     messages = [{'role': 'user', 'content': 'Use get_time for Asia/Seoul, then report its result.'}]
     tools = [dict(name='get_time', description='Get current time', input_schema={
         'type': 'object', 'properties': {'tz': {'type': 'string'}}, 'required': ['tz']})]
@@ -78,7 +77,7 @@ def main():
     raw = request('/v1/messages', dict(common, stream=True, messages=[{'role': 'user', 'content': 'Say PONG.'}]), True)
     if 'event: message_start' not in raw or 'event: message_stop' not in raw:
         raise ValueError('incomplete SSE stream')
-    print('API checks passed. Effort field acceptance does not prove the server honored max reasoning.')
+    print('API checks passed. No effort field was sent by this probe; thinking support was checked separately.')
     print('Next: run a small managed task to check the actual Claude CLI and local permissions.')
     return 0
 

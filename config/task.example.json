@@ -1,10 +1,10 @@
 {
-  "purpose": "duration 파서의 빈 입력 처리 구현",
+  "purpose": "duration \ud30c\uc11c\uc758 \ube48 \uc785\ub825 \ucc98\ub9ac \uad6c\ud604",
   "repository": ".",
   "base_commit": "HEAD",
   "profile": "",
   "compute_backend": "local",
-  "instructions": "src/durations.py의 parse를 구현한다. 공개 시그니처와 테스트는 바꾸지 않는다. 테스트는 verify에 적힌 캐시 없는 명령으로 실행한다.",
+  "instructions": "src/durations.py\uc758 parse\ub97c \uad6c\ud604\ud55c\ub2e4. \uacf5\uac1c \uc2dc\uadf8\ub2c8\ucc98\uc640 \ud14c\uc2a4\ud2b8\ub294 \ubc14\uafb8\uc9c0 \uc54a\ub294\ub2e4. \ud14c\uc2a4\ud2b8\ub294 verify\uc5d0 \uc801\ud78c \uce90\uc2dc \uc5c6\ub294 \uba85\ub839\uc73c\ub85c \uc2e4\ud589\ud55c\ub2e4.",
   "references": [
     "src/durations.py",
     "tests/test_durations.py"
@@ -24,7 +24,6 @@
   "verify_timeout": 300,
   "depends_on_uncommitted": false,
   "role": "implementer",
-  "effort": "max",
   "inputs": [],
   "permission_profile": "workspace",
   "read_paths": [],

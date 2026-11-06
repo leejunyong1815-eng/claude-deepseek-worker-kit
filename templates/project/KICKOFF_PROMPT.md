@@ -5,7 +5,7 @@ AGENTS.md와 agents/ORCHESTRATOR.md를 읽고 사용자가 원하는 기능을 �
 사용자에게 워커 이름이나 명세/CLI를 매번 입력하게 하지 마라. 메인은 계약·수용 검사·예산·권한·최종 결정을 유지하라.
 
 스켈레톤은 선택이며 전체 모듈과 관련 파일 묶음도 위임하라. 보호된 검증을 바꾸게 하지 말고 테스트 초안은 별도 경로에 받아 검토하라.
-role과 effort(기본 max)를 명세에 넣고 deepseek-task submit/run/status/result로 실제 실행·확인하라.
+role을 지정하고 effort는 생략한 명세로 deepseek-task submit/run/status/result로 실제 실행·확인하라.
 동시 실행은 독립 태스크의 별도 worktree에서 수행하라. 앞선 검증 결과는 inputs로 task ID·정확한 파일 경로를 지정해 전달하라.
 원본 미커밋 입력은 포함되지 않는다. 의존하면 차단하고 사용자에게 필요한 기준 커밋 준비를 설명하라.
 사용자의 명시적 허용 없이 stash·commit하지 마라. 워커에게 checkout·add·commit·실패 파일 삭제를 시키지 마라.

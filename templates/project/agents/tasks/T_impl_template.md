@@ -2,7 +2,7 @@
 - 관리 task ID / attempt ID: <등록/실행 후 기록>
 - 저장소 / 기준 커밋: <절대 경로> / <커밋 해시>
 - 작업 공간: <실행기가 준비한 worktree; checkout·add·commit 금지>
-- role / effort: implementer / max (요청값)
+- role: implementer (effort는 생략)
 - profile: <기본은 빈 문자열; 설치된 연결 프로필>
 - inputs: <검증된 선행 task ID와 읽을 정확한 변경 파일 경로; 없으면 []>
 - 예산: <N> 분, 편집 파일 ≤ <M> 개

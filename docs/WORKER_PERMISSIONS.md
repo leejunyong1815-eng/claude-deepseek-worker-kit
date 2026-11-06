@@ -99,4 +99,5 @@ GLM 래퍼에서 쓰던 CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1도 반영해 일반 �
 원격 계산 권한은 모델의 임의 SSH 허용으로 확장하지 않는다. 메인이 등록 시 고정한
 compute_job만 별도 실행기가 local/SSH로 수행한다. SSH는 BatchMode와 기존 known_hosts를 사용한다.
 Qwen은 실행 뒤 읽기 경로로 제공된 compute.result.json과 작업 출력으로 운영 보고서를 작성한다.
+로컬 잡의 해당 run 로그 파일만 읽기 허용하며 다른 잡의 폴더나 원격 로그 경로는 추가하지 않는다.
 일반 DeepSeek 워커의 직접 SSH·rsync 제한은 유지된다. 자세한 범위는 COMPUTE_JOBS.md를 참고한다.

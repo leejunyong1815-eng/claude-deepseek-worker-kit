@@ -33,7 +33,6 @@ cp ~/claude-deepseek-worker-kit/config/task.example.json /tmp/deepseek-task.json
   "base_commit": "HEAD",
   "profile": "",
   "role": "implementer",
-  "effort": "max",
   "max_turns": 120,
   "inputs": [],
   "compute_backend": "local",
@@ -174,8 +173,9 @@ LLM 서버는 추론 접속점일 뿐 계산 노드가 아니다. 새 워커 프
 ## 역할·추론·태스크 연결
 
 `role`은 planner/researcher/implementer/test-author/runner/analyst/reviewer 중 하나이며 기본 implementer다.
-`effort`는 low/high/max 중 하나이며 기본 max다. 프로필의 모델 설정은 그대로 재사용하고, 역할 프롬프트만 실행 시 선택한다.
-태스크에 고정한 effort는 CLI로 전달되고 결과에 기록된다. 서버의 실제 thinking 소비량을 측정한 값은 아니다.
+`effort`는 새 명세에서 생략한다. 이전 명세의 low/high/max 값은 호환성과 이력을 위해 보존하지만 CLI에 전달하지 않는다.
+결과의 `effort`는 null, `effort_forwarded`는 false다. 이전 요청값은 `requested_effort`에 남긴다.
+프로필의 모델 설정은 재사용하고, 역할 프롬프트만 실행 시 선택한다. CLI 자체의 HTTP 기본값까지 제거하는 설정은 아니다.
 기본 worker timeout은 1800초, 검증은 명령마다 300초다. 명시한 timeout이 우선한다.
 
 구현 결과를 독립 리뷰에 넘기는 명세 예시:
@@ -187,7 +187,6 @@ LLM 서버는 추론 접속점일 뿐 계산 노드가 아니다. 새 워커 프
   "base_commit": "<생산 태스크와 같은 커밋 해시>",
   "profile": "",
   "role": "reviewer",
-  "effort": "max",
   "inputs": [{"task_id": "<성공한 생산 task ID>", "paths": ["src/durations.py"]}],
   "instructions": ".task-inputs/<생산 task ID>/src/durations.py를 기준 코드·계약·보호 테스트와 비교한다. 근거와 반례를 reports/review.md에 작성한다. 실제 입력 코드를 검사하고 실행한 명령·한계를 기록한다.",
   "references": ["tests/"],

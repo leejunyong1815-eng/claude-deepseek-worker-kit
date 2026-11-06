@@ -32,8 +32,9 @@ assert not os.environ.get('CLAUDECODE')
 assert not os.environ.get('CLAUDE_CODE_SESSION_ID')
 assert not os.environ.get('CLAUDE_CODE_CHILD_SESSION')
 assert os.environ['ANTHROPIC_MODEL'] == 'mock-model'
-assert os.environ['CLAUDE_CODE_EFFORT_LEVEL'] == os.environ['DEEPSEEK_WORKER_EFFORT']
-assert sys.argv[sys.argv.index('--effort') + 1] == os.environ['DEEPSEEK_WORKER_EFFORT']
+assert '--effort' not in sys.argv
+for key in ('CLAUDE_CODE_EFFORT_LEVEL','DEEPSEEK_WORKER_EFFORT','LLM_EFFORT'):
+    assert key not in os.environ
 assert 1 <= int(sys.argv[sys.argv.index('--max-turns') + 1]) <= 1000
 assert os.environ['DEEPSEEK_WORKER_ROLE'] in sys.argv[sys.argv.index('-p') + 1]
 for tier in ('OPUS', 'SONNET', 'HAIKU', 'FABLE'):
@@ -86,6 +87,13 @@ if mode == 'settings_edit':
 if mode in ('permission_denied','permission_denied_exit'):
     print(json.dumps({'is_error':False,'permission_denials':[{'tool_name':'Write','tool_input':{'content':os.environ['ANTHROPIC_AUTH_TOKEN']}}]}))
     sys.exit(7 if mode == 'permission_denied_exit' else 0)
+if mode == 'compute_log_read':
+    record=json.loads(prompt.split('Trusted compute result (already executed; do not relaunch): ',1)[1].split('\n\n',1)[0])
+    for name in ('stdout_path','stderr_path','verification_log','remote_result_path'):
+        path=record[name]
+        assert any(path in rule for rule in settings['permissions']['allow'])
+        assert any(path in rule for rule in settings['permissions']['deny'])
+        assert Path(path).is_file()
 if mode == 'external_read':
     assert Path(args['input']).read_text() == 'dataset fixture'
     assert any(args['input'] in rule for rule in settings['permissions']['allow'])
@@ -221,6 +229,16 @@ class ManagedTasks(unittest.TestCase):
         self.assertEqual(result['reason'], 'compute_exit_nonzero')
         self.assertEqual(result['compute_result']['command_exit_code'], 9)
 
+    def test_qwen_can_read_only_its_own_local_job_logs_with_native_tools(self):
+        job=dict(resource='cpu',transport='local',cwd='@worktree',
+                 command=['python3','-c','print("job evidence")'],verify=[['python3','-c','assert True']])
+        state=self.run_task(self.submit('compute_log_read',role='compute-runner',profile='qwen',compute_job=job))
+        self.assertEqual(state['permission_denial_count'],0)
+        settings=json.loads(Path(state['worker_settings_path']).read_text())
+        other=str(self.root/'runtime/deepseek-worker/compute/another-run/stdout.log')
+        self.assertFalse(any(other in rule for rule in settings['permissions']['allow']))
+        self.assertFalse(any('deepseek-worker/compute/**' in rule for rule in settings['permissions']['allow']))
+
     def test_managed_compute_progress_and_cancel_use_existing_task_interface(self):
         job = dict(resource='cpu', transport='local', cwd='@worktree',
                    command=['python3','-c','import time;time.sleep(20)'],
@@ -236,13 +254,31 @@ class ManagedTasks(unittest.TestCase):
         self.assertFalse(result['verification_valid'])
         self.assertIn('compute_cleanup_confirmed', result)
 
-    def test_role_and_effort_recorded_and_sent_to_actual_cli(self):
+    def test_roles_preserve_legacy_request_but_do_not_forward_effort(self):
         for role in ("planner", "researcher", "implementer", "test-author", "runner", "analyst", "reviewer"):
             state = self.run_task(self.submit(role=role, effort="max"))
             self.assertEqual(state["role"], role)
-            self.assertEqual(state["effort"], "max")
+            self.assertIsNone(state["effort"])
+            self.assertEqual(state["requested_effort"], "max")
+            self.assertFalse(state["effort_forwarded"])
         state = self.run_task(self.submit(role="reviewer", effort="high"))
-        self.assertEqual(state["effort"], "high")
+        self.assertIsNone(state["effort"])
+        self.assertEqual(state["requested_effort"], "high")
+
+    def test_legacy_effort_spec_is_immutable_across_retry(self):
+        task=self.submit(effort='max')
+        folder=self.store/task
+        frozen=(folder/'spec.json').read_bytes()
+        self.env.update(LLM_EFFORT='high',DEEPSEEK_WORKER_EFFORT='max',CLAUDE_CODE_EFFORT_LEVEL='high')
+        first=self.run_task(task)
+        old=(folder/'attempts/0001/result.json').read_bytes()
+        second=self.run_task(task,True,'--retry')
+        for state in (first,second):
+            self.assertIsNone(state['effort'])
+            self.assertEqual(state['requested_effort'],'max')
+            self.assertFalse(state['effort_forwarded'])
+        self.assertEqual((folder/'spec.json').read_bytes(),frozen)
+        self.assertEqual((folder/'attempts/0001/result.json').read_bytes(),old)
 
     def test_verified_producer_inputs_are_copied_and_protected(self):
         producer = self.submit()

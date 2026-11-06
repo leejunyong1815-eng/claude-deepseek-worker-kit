@@ -148,7 +148,7 @@ class LabDemoTests(unittest.TestCase):
             args = json.loads(subprocess.check_output([launcher], env=env, text=True))
             self.assertEqual(args[args.index("--model") + 1], override or "claude-fable-5-1")
             self.assertEqual(args[args.index("--name") + 1], "lab-demo-" + info["run_id"])
-            self.assertEqual(args[args.index("--effort") + 1], "high")
+            self.assertNotIn("--effort", args)
             self.assertNotIn("--dangerously-skip-permissions", args)
             self.assertIn("local CPU", args[args.index("--append-system-prompt") + 1])
 

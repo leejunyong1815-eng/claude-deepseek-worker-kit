@@ -167,10 +167,7 @@ def main():
             if not values["LLM_CONTEXT_WINDOW"].isdigit() or int(values["LLM_CONTEXT_WINDOW"]) <= 0:
                 p.error("LLM_CONTEXT_WINDOW must be the lab server's positive context limit")
             values["LLM_BASE_URL"] = values["LLM_BASE_URL"].rstrip("/")
-            effort = os.environ.get("LLM_EFFORT", inherited.get("LLM_EFFORT", "max"))
-            if effort not in {"low", "high", "max"}:
-                p.error("LLM_EFFORT must be low, high or max")
-            values.update(LLM_EFFORT=effort, LLM_DISABLE_BETAS="1", LLM_DISABLE_PROMPT_CACHING="0",
+            values.update(LLM_DISABLE_BETAS="1", LLM_DISABLE_PROMPT_CACHING="0",
                           WORKER_NAME="deepseek-worker" + ("-" + args.profile if args.profile else ""),
                           WORKER_ROLE=ROLES.get(args.profile, ""), COMPUTE_HOST="")
     conf.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -204,7 +201,7 @@ def main():
             shutil.copy2(target, backup / target.name)
         write(target, values)
     render(conf)
-    print("Prompts rendered. Code workspace: local/WSL; explicit compute jobs may use SSH. Requested effort=max unless configured otherwise.")
+    print("Prompts rendered. Code workspace: local/WSL; explicit compute jobs may use SSH. Worker effort is left to Claude/backend defaults.")
     if args.probe:
         command = [str(args.prefix.expanduser().resolve() / "deepseek-probe")]
         if args.profile:

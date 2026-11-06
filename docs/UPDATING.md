@@ -104,3 +104,18 @@ resume만으로 반영된다고 가정하지 않는다. 새 대화를 시작하�
 새 프록시의 기본 인증 모드는 none이며 Claude CLI에 전달하는 litellm-no-auth는 비밀 키가 아닌
 클라이언트용 식별자다. 기존 키 인증 설정은 자동으로 해제하지 않는다.
 프로젝트 규칙도 deepseek-project-update로 비교·적용하고 재개한 메인에 새 역할 규칙을 다시 읽게 한다.
+
+## effort 전달 제거
+
+```bash
+git pull --ff-only
+./install.sh --update
+```
+
+새 워커는 --effort와 CLAUDE_CODE_EFFORT_LEVEL을 전달하지 않는다. env/env.<프로필>의
+기존 LLM_EFFORT는 삭제하지 않고 실행 시 무시하므로 설정을 다시 만들 필요가 없다.
+등록된 원본 태스크 명세도 바꾸지 않는다. 이전 effort 요청은 requested_effort에 보존하고,
+새 실행 결과는 effort=null, effort_forwarded=false로 기록한다. 이미 실행 중인 워커에는 소급 적용되지 않는다.
+
+CLI가 자체 기본 effort를 HTTP 요청에 넣는 동작은 별개다. 현재 확인한 CLI 2.1.314는
+옵션·환경변수가 없어도 high를 전송했다. 이 업데이트가 HTTP effort 필드를 제거하는 것은 아니다.

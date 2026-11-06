@@ -5,7 +5,7 @@
 정책과 절차는 agents/ORCHESTRATOR.md, 역할은 agents/ROLE_*.md를 읽는다.
 
 - 관리 CLI: deepseek-task submit/run/status/result/cancel. role은 researcher, planner, implementer,
-  test-author, runner, analyst, reviewer 중 선택한다. Compute Job은 Qwen의 compute-runner에 배정한다. 기본 요청 effort=max다.
+  test-author, runner, analyst, reviewer 중 선택한다. Compute Job은 Qwen의 compute-runner에 배정한다. effort는 명세에 지정하지 않는다.
 - 메인은 목표·계약·예산·권한·독립 수용 검사 신뢰성·최종 결정에 집중한다. 스켈레톤은 선택이다.
 - 여러 관련 파일과 완결된 모듈을 위임할 수 있다. 단순히 파일이 여러 개라는 이유로 메인이 구현하지 않는다.
 - 별도 task ID/worktree에서 독립 태스크를 병렬 실행할 수 있다. 실제 서버와 로컬 자원을 고려해 수를 정한다.

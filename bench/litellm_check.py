@@ -37,6 +37,8 @@ def main():
     def check(model, kind, operation):
         if args.check and kind not in args.check:
             return
+        if kind == 'messages_effort' and not args.check:
+            return  # Effort probing is an explicit diagnostic, never part of the default run.
         start = time.monotonic()
         row = {'model':model,'check':kind}
         try:

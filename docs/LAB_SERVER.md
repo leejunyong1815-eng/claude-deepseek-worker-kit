@@ -30,6 +30,17 @@ python3 -B bench/litellm_check.py --base-url http://1.233.219.161:4000 --output 
 이 명령은 실제 모델 요청을 보낸다. 인증이 필요하면 LLM_API_KEY를 환경변수로 제공한다.
 기존 env의 마이그레이션은 README/UPDATING.md를 따른다.
 
+## 워커 effort 생략
+
+워커 실행에서는 --effort와 CLAUDE_CODE_EFFORT_LEVEL을 생략한다. 기존 env/task의 effort 값은
+실행에 적용하지 않는다. 일반 deepseek-probe도 output_config.effort를 보내지 않는다.
+bench/litellm_check.py의 effort 호환 검사는 --check messages_effort로 명시할 때만 실행한다.
+
+격리된 새 HOME에서 옵션·환경변수 생략 시 DeepSeek 구현과 Qwen CPU 잡 운영이 성공했다.
+[검증 기록](validation/effort-omission.json)에 98개 오프라인 검사, 실제 모델·로그 읽기·기존 설정 호환 결과를 남겼다.
+현재 Claude CLI 2.1.314의 요청 기록에는 기본 high가 있었다. 따라서 CLI 명시 설정 생략과
+HTTP effort 필드 제거를 구분한다. 앞선 max 시간 초과에는 프록시 HTTP 500도 있어 원인을 하나로 단정하지 않는다.
+
 ## 이전 서버의 기록 (2026-10-30)
 
 아래는 이전 주소에서 당시 측정한 기록이다. 현재 기본값이나 새 서버의 속도 측정이 아니다.
@@ -62,7 +73,7 @@ OpenAI 응답은 usage.completion_tokens_details.reasoning_tokens와 스트리�
 
 - OpenAI 경로의 `reasoning_effort=low/high/max`는 각각 HTTP 400 UnsupportedParamsError로 거절됐다.
 - Anthropic 경로의 thinking/output_config.effort=max 요청은 받아들였지만 thinking 블록은 관찰되지 않았다.
-- 따라서 키트의 max는 요청값이며 **gateway가 max를 실제 적용했다고 확인하지 못했다**.
+- 따라서 당시 키트의 max는 요청값이며 **gateway가 max를 실제 적용했다고 확인하지 못했다**.
   이 측정은 서버 기본 reasoning 설정으로 수행했다. 서버 옵션을 변경하거나 거절된 필드를 자동 우회하지 않았다.
 
 ## 속도 측정

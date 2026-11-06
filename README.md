@@ -26,7 +26,7 @@ claude auth login
 ```
 
 Claude Code는 WSL 안에 설치합니다. 설치·로그인 방법은 [공식 문서](https://code.claude.com/docs/en/setup)를 참고하세요.
-이 키트는 Python 3.9 이상과 `--effort`, `--name`을 지원하는 Claude Code 2.1.224 이상을 사용합니다.
+이 키트는 Python 3.9 이상과 `--name`을 지원하는 Claude Code 2.1.224 이상을 사용합니다.
 `tmux`는 `deepseek-duo`를 사용할 때만 필요합니다 (`sudo apt install tmux`).
 
 ### 2. 저장소 받기
@@ -150,8 +150,10 @@ CPU 모사와 SSH GPU 잡 명세는 [Compute Job 문서](docs/COMPUTE_JOBS.md)�
 
 기본 실행 제한은 120턴·1800초, 검증은 명령별 300초입니다. 명세의 `max_turns`(1–1000),
 `timeout`, `verify_timeout`으로 조정합니다. Compute Job은 별도의 대기·실행·검증 예산을 사용합니다.
-기본 effort는 `max`로 요청합니다. 현재 서버의 Anthropic 경로에서 thinking 블록과 effort 필드 수용을 확인했습니다.
-요청한 effort의 실제 적용량까지 증명한 것은 아닙니다. 자세한 내용은 [측정 기록](docs/LAB_SERVER.md)에 있습니다.
+워커는 `--effort` 옵션과 `CLAUDE_CODE_EFFORT_LEVEL`을 전달하지 않습니다. 기존 프로필의
+`LLM_EFFORT`와 이전 태스크의 `effort`도 실행에는 적용하지 않습니다. 추론 설정은 Claude CLI와 서버의 기본 동작을 사용합니다.
+CLI 자체가 HTTP 요청에 기본 effort를 넣을 수 있습니다. 현재 CLI에서 `high`를 자동 전송한 것을 확인했으며,
+키트가 HTTP 필드를 제거한다는 뜻은 아닙니다. [확인 기록](docs/LAB_SERVER.md)을 참고하세요.
 
 원본의 미커밋 변경은 worktree에 포함되지 않습니다. 필요한 입력이 기준 커밋에 있는지 먼저 확인해야 합니다.
 실패·취소·중단된 worktree와 로그는 보존하며, 자동 stash·commit·merge·push·삭제는 하지 않습니다.

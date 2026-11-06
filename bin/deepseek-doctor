@@ -42,7 +42,7 @@ def main():
             # Never dump CLI stderr or arbitrary output: it may contain local credentials.
             check('Claude version', bool(valid), match.group(0) if match else 'unreadable (requires >=2.1.224)')
             help_result = subprocess.run([claude, '--help'], env=env, capture_output=True, text=True, timeout=15)
-            for flag in ('--effort', '--name'):
+            for flag in ('--name',):
                 supported = help_result.returncode == 0 and re.search(re.escape(flag) + r'(?:[\s=,]|$)', help_result.stdout)
                 check('Claude ' + flag, bool(supported), 'available' if supported else 'missing; update Claude Code')
         except (OSError, subprocess.TimeoutExpired):

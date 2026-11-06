@@ -58,7 +58,7 @@ python3 -B demo/prepare.py
 ./start.sh
 ```
 
-`start.sh`는 준비된 작업 공간으로 이동해 `deepseek-main --model claude-fable-5-1 --effort high`를 실행하고
+`start.sh`는 준비된 작업 공간으로 이동해 `deepseek-main --model claude-fable-5-1`를 실행하고
 데모 운영 지침을 추가한다. 참고 대화에서 선택한 Fable 오케스트레이터를 사용한다.
 계정에서 다른 모델을 사용해야 한다면 `DEMO_ORCHESTRATOR_MODEL=<사용할 모델> ./start.sh`로 명시한다.
 오케스트레이터 이름은 실행마다 고유하게 정하며 워커 모델 라우팅은 바꾸지 않는다.
