@@ -11,7 +11,7 @@ Bash의 관리 CLI로 위임한다. 아래 일반 도구 허용은 워커에 적
 
 | permission_profile | 동작 |
 |---|---|
-| workspace (기본) | worktree 파일 도구, Bash, 웹 검색/조회, 일반 에이전트 도구 허용 |
+| workspace (기본) | worktree 파일 도구, 일반 Bash·환경 구성, SSH/scp/sftp/rsync, 웹·에이전트 도구 허용 |
 | custom | permissions_file의 allow 규칙과 명시한 외부 경로만 추가 |
 | inherit | 추가 권한 없이 기존 Claude 설정 사용; 이전 동작 |
 
@@ -39,7 +39,26 @@ read_paths는 절대 경로나 명세 디렉터리 기준의 실제 상대 경�
 실행 시 경로가 없으면 워커를 시작하지 않는다. 파일 도구의 Read를 허용하고 Edit는 거절한다.
 scratch_paths는 절대 경로/패턴이며 루트·상위 경로 이동은 거절한다. 지정 경로의 Read/Edit를 허용하고 자동 삭제하지 않는다.
 원본 checkout, `.git`, `.claude/`, tests/, config/, .task-inputs/와 명세의 보호 경로는 native Edit에서 제외한다.
-git add/commit/checkout 등의 변경 명령과 ssh/rsync도 기본 거절한다. Bash의 모든 간접 동작을 막는 보안 경계는 아니다.
+git add/commit/checkout 등의 변경 명령은 계속 거절한다. Bash의 모든 간접 동작을 막는 보안 경계는 아니다.
+
+## 연구실 SSH·원격 작업
+
+기본 workspace는 일반 Bash 외에 `Bash(ssh *)`, `Bash(scp *)`, `Bash(sftp *)`,
+`Bash(rsync *)`를 명시적으로 허용한다. Python·Node·패키지/환경 도구·파일 복사도 일반 Bash 권한을 사용한다.
+연구실에서 신뢰하는 워커를 전제로 하며 추가 권한 JSON 없이 원격 조사·설정·실행·전송을 맡길 수 있다.
+태스크 지시문에는 실제 SSH 별칭/user@host, 원격 경로, 작업 범위와 예산을 넣는다.
+추론 게이트웨이 주소를 SSH 호스트로 추정하지 않는다. 키트는 내부망 주소 여부를 판별하지 않는다.
+
+기존 SSH config·키·agent·known_hosts를 사용한다. 키트가 호스트 키 확인을 끄거나 인증 정보를
+명세/로그에 복사하지 않는다. 일반 직접 SSH는 worktree 외부의 원격 파일을 최종 diff로 검사하지 못한다.
+원격 revision·명령·실제 종료 코드·산출물 근거를 로컬 보고서에 남기고 검증 명령으로 확인한다.
+직접 시작한 원격 프로세스는 관리 태스크 취소만으로 종료를 보장하지 않는다. 대기/GPU 배정·원격 취소·
+고정 실행 기록이 필요한 잡은 기존 compute_job 실행기를 사용한다.
+
+custom은 permissions_file의 SSH/전송 허용 규칙을 사용할 수 있고 키트의 강제 SSH deny가 덮어쓰지 않는다.
+기존 파일이나 사용자/프로젝트/조직 설정의 deny·ask는 여전히 우선한다. 예전 제안의 `Bash(ssh:*)`나
+`Bash(rsync:*)` deny가 남아 있다면 그 파일의 소유자가 수정하고 새 태스크를 등록한다.
+등록 시 복사한 규칙과 진행 중인 워커 권한은 자동 변경하지 않는다.
 
 ## 기존 제안 파일 사용
 
@@ -99,8 +118,20 @@ GLM 래퍼에서 쓰던 CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1도 반영해 일반 �
 
 ## Qwen Compute Job
 
-원격 계산 권한은 모델의 임의 SSH 허용으로 확장하지 않는다. 메인이 등록 시 고정한
-compute_job만 별도 실행기가 local/SSH로 수행한다. SSH는 BatchMode와 기존 known_hosts를 사용한다.
+메인이 등록 시 고정한 compute_job은 별도 실행기가 local/SSH로 수행한다. SSH는 BatchMode와 기존 known_hosts를 사용한다.
 Qwen은 실행 뒤 읽기 경로로 제공된 compute.result.json과 작업 출력으로 운영 보고서를 작성한다.
 로컬 잡의 해당 run 로그 파일만 읽기 허용하며 다른 잡의 폴더나 원격 로그 경로는 추가하지 않는다.
-일반 DeepSeek 워커의 직접 SSH·rsync 제한은 유지된다. 자세한 범위는 COMPUTE_JOBS.md를 참고한다.
+Qwen은 해당 잡의 명시된 호스트에서 로그를 조회하거나 허용 출력 경로로 회수할 수 있다.
+잡 재실행·명령 변경·다른 호스트로 확대하는 일은 맡기지 않는다. 일반 DeepSeek 워커는 위의 SSH 권한으로
+별도 원격 작업을 수행할 수 있다. 자세한 잡 수명 관리는 COMPUTE_JOBS.md를 참고한다.
+
+## SSH 권한 회귀 검사 (2026-11-07)
+
+기본 workspace와 custom SSH 허용을 실제 Claude CLI 2.1.314로 확인했다. 호스트 홈을 숨긴
+bubblewrap 환경에서 모의 API가 파일 작성과 scp → SSH 명령 → rsync/sftp 회수를 요청했다.
+두 태스크 모두 권한 거절 없이 외부 테스트를 통과했고 원본 checkout은 유지됐다.
+별도 태스크의 기존 SSH deny는 실제 CLI에서 거절됐으며 명령이 실행되지 않았다.
+
+모델과 SSH/전송 도구는 모의 실행이다. 실제 원격 로그인·GPU·모델 추론을 검증한 결과는 아니다.
+테스트 환경의 네트워크는 공유됐지만 요청은 로컬 모의 API로만 보냈다.
+오프라인 테스트와 세 사례의 결과는 [검증 기록](validation/ssh-permissions.json)에 남긴다.

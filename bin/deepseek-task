@@ -642,8 +642,11 @@ class Tasks:
                    worker_settings_digest=digest(settings_value) if settings_value is not None else None,
                    permission_denial_count=0, permission_denied_tools=[])
             prompt = (f"Managed task {task}, attempt {attempt}. Role: {spec['role']}. Purpose: {spec['purpose']}\n"
-                      "Compute backend: local (this computer, often WSL). Run the assigned implementation and tests locally. "
-                      "The LLM inference server is not the compute backend. Do not use SSH or remote-* for this task.\n"
+                      "Code workspace: local (this computer, often WSL). Verify the assigned worktree locally. "
+                      "Workspace permissions allow SSH, scp, sftp, rsync and remote commands for the task's named hosts and paths; "
+                      "other permission profiles follow their explicit grants. "
+                      "Use existing SSH authentication and host-key verification. Never infer a compute host from the LLM URL. "
+                      "Use the trusted compute executor for queued/GPU jobs; do not relaunch a supplied compute result.\n"
                       f"Your assigned worktree is {wt}, detached at {spec['base_commit']}. "
                       "Stay in this worktree. Do not checkout, add, commit, merge or remove worktrees. "
                       "Leave edits for external verification. Your report is not the success decision.\n"

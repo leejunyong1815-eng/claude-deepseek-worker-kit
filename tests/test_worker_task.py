@@ -98,6 +98,15 @@ if mode == 'external_read':
     assert Path(args['input']).read_text() == 'dataset fixture'
     assert any(args['input'] in rule for rule in settings['permissions']['allow'])
     assert any(args['input'] in rule for rule in settings['permissions']['deny'])
+if mode == 'remote':
+    assert os.environ['SSH_AUTH_SOCK'].endswith('/fixture-agent.sock')
+    assert 'SSH, scp, sftp, rsync and remote commands' in prompt
+    assert 'Do not use SSH or remote-* for this task' not in prompt
+    for command in ('ssh','scp','sftp','rsync'):
+        assert 'Bash('+command+' *)' in settings['permissions']['allow']
+        assert 'Bash('+command+':*)' not in settings['permissions']['deny']
+    result = subprocess.run(['ssh','lab-fixture','inspect'],capture_output=True,text=True,check=True)
+    Path('src/remote.txt').write_text(result.stdout)
 if mode == 'nonzero': sys.exit(7)
 if mode == 'invalid': print('Tests passed!'); sys.exit(0)
 print(json.dumps({'is_error': mode == 'model_error', 'result': 'all tests passed'}))
@@ -347,6 +356,18 @@ class ManagedTasks(unittest.TestCase):
         self.assertEqual(state['permission_denial_count'],0)
         state=self.run_task(self.submit(permission_profile='inherit'))
         self.assertIsNone(state['worker_settings_path'])
+
+    def test_remote_commands_reach_worker_and_leave_the_original_checkout_unchanged(self):
+        self.env['SSH_AUTH_SOCK'] = str(self.root / 'fixture-agent.sock')
+        ssh = self.mock / 'ssh'
+        ssh.write_text('#!/bin/sh\n[ "$1" = lab-fixture ] && [ "$2" = inspect ] || exit 7\nprintf "REMOTE_OK\\n"\n')
+        ssh.chmod(0o755)
+        state = self.run_task(self.submit('remote', verify=['test "$(cat src/remote.txt)" = REMOTE_OK']))
+        self.assertEqual(state['permission_denial_count'], 0)
+        self.assertTrue(state['verification_valid'])
+        self.assertEqual((Path(state['worktree']) / 'src/remote.txt').read_text(), 'REMOTE_OK\n')
+        self.assertEqual(self.git('status', '--porcelain'), b'')
+        self.assertFalse((self.repo / 'src/remote.txt').exists())
 
     def test_permission_denials_are_failures_and_not_natural_language_success(self):
         state=self.run_task(self.submit('permission_denied'),False)

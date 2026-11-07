@@ -54,6 +54,37 @@ class PermissionRules(unittest.TestCase):
         self.assertIn('Edit(//tmp/gre_*/**)',settings['allow'])
         self.assertEqual(policy['scratch_paths'],['/tmp/gre_*'])
 
+    def test_workspace_explicitly_allows_remote_tools_and_keeps_git_protection(self):
+        rules = self.settings()['permissions']
+        for command in ('ssh', 'scp', 'sftp', 'rsync'):
+            self.assertIn('Bash(%s *)' % command, rules['allow'])
+            self.assertNotIn('Bash(%s:*)' % command, rules['deny'])
+            self.assertNotIn('Bash(%s *)' % command, rules['deny'])
+        # General Bash also covers Python, environment setup and project scripts.
+        self.assertIn('Bash', rules['allow'])
+        for command in ('add', 'commit', 'checkout', 'reset', 'push'):
+            self.assertIn('Bash(git %s:*)' % command, rules['deny'])
+
+    def test_custom_remote_grants_are_not_overridden_by_generated_denies(self):
+        path = self.root / 'remote.json'
+        path.write_text(json.dumps({'permissions': {'allow': ['Bash(ssh lab-node *)', 'Bash(rsync *)']}}))
+        rules = self.settings(self.normalize(permission_profile='custom', permissions_file=str(path)))['permissions']
+        self.assertIn('Bash(ssh lab-node *)', rules['allow'])
+        self.assertIn('Bash(rsync *)', rules['allow'])
+        self.assertNotIn('Bash', rules['allow'])
+        self.assertNotIn('Bash(ssh:*)', rules['deny'])
+        self.assertNotIn('Bash(rsync:*)', rules['deny'])
+
+    def test_existing_remote_denies_and_asks_are_preserved(self):
+        path = self.root / 'restricted.json'
+        path.write_text(json.dumps({'permissions': {'deny': ['Bash(ssh *)'], 'ask': ['Bash(rsync *)']}}))
+        policy = self.normalize(permissions_file=str(path))
+        path.write_text('{}')
+        rules = self.settings(policy)['permissions']
+        self.assertIn('Bash(ssh *)', rules['allow'])
+        self.assertIn('Bash(ssh *)', rules['deny'])
+        self.assertIn('Bash(rsync *)', rules['ask'])
+
     def test_inherit_and_custom_are_explicit_and_keep_custom_deny_ask(self):
         self.assertIsNone(self.settings(self.normalize(permission_profile='inherit')))
         path=self.root/'proposed.json'

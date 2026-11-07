@@ -96,6 +96,11 @@ Agent/Task/Workflow/TeamCreate/Skill 도구를 제외한다. fork형 Skill도 �
 프로젝트별 문서 재독은 여전히 필요하다. [공식 resume 옵션](https://code.claude.com/docs/en/cli-reference#system-prompt-flags-in-resumed-conversations).
 대화형 워커의 업데이트된 역할 프롬프트가 필요하면 새 워커 세션을 시작한다.
 
+새 workspace 권한은 SSH·scp·sftp·rsync를 명시적으로 허용한다. 런처와 생성 프롬프트의
+로컬 전용 금지도 제거한다. 적용은 새 시도부터이며 사용자/프로젝트/조직의 deny·ask는 보존한다.
+예전 permissions_file에 SSH deny가 복사된 태스크는 원본 파일을 고쳐도 바뀌지 않는다.
+허용 규칙을 검토·수정한 뒤 새 태스크를 등록한다. Qwen의 잡 재실행 금지와 원본/보호 파일 검증은 유지한다.
+
 기존 태스크의 기준 커밋과 명세는 바뀌지 않는다. 실패/중단한 태스크는 --retry로 새 시도를 만들 수 있지만
 이전 시도의 미커밋 코드를 이어받는 기능은 아니다. 새 read_paths·권한 규칙·입력이 필요하면 새로 등록한다.
 기존 성공 검증을 유지한 채 worktree를 수정하지 않는다. 랩미팅 데모는 갱신 후 demo/prepare.py로 새로 준비한다.

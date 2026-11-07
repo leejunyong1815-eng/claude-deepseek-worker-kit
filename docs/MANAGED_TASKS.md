@@ -113,6 +113,9 @@ queued → running → verifying → succeeded
 확인하고 `cancel`로 해당 세션을 종료한 후 명시적으로 재시도한다. 정상 SIGINT/SIGTERM도 자식을 정리하고 `interrupted`로 남긴다.
 현재 관리 모드는 **Linux(/proc, WSL2 포함)** 전용이다. 기존 수동 실행 모드의 지원 범위는 유지된다.
 코드 작업의 backend는 기본 `local`(현재 컴퓨터/WSL)이다. `compute_backend`를 생략해도 같으며, 관리 모드는 현재 다른 backend를 거절한다.
+이는 작업 공간과 최종 검증 위치다. 기본 workspace 워커는 태스크에 지정한 SSH 호스트의 원격 명령·
+scp/sftp/rsync 전송을 사용할 수 있다. 원격 변경은 로컬 diff만으로 검증되지 않으므로 별도 근거·검사를 명세에 넣는다.
+대기·GPU 배정·원격 취소가 필요한 잡은 compute_job을 사용한다.
 LLM 서버는 추론 접속점일 뿐 계산 노드가 아니다. 새 워커 프로세스에는 부모 Claude의 세션 ID 표지만 전달하지 않으며,
 기존 프로필·권한 설정은 유지한다.
 

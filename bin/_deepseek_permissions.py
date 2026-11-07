@@ -21,7 +21,9 @@ Design notes
 * The original checkout, worktree ``.git``, protected paths and the kit's own
   control directories stay denied for native edits even when the caller omits
   them.
-* Git mutations, ``ssh`` and ``rsync`` are denied as shell command patterns.
+* The trusted-lab workspace profile allows general shell execution, including
+  SSH commands and scp/sftp/rsync transfers. Existing caller deny/ask rules win.
+* Git mutations remain denied as shell command patterns.
 
 Security
 --------
@@ -46,10 +48,11 @@ DEFAULT_PROFILE = "workspace"
 DEFAULT_PROTECTED = (".claude/", "tests/", "config/", ".task-inputs/")
 GIT_MUTATING = ("add", "commit", "checkout", "switch", "reset", "restore", "clean",
                 "stash", "merge", "rebase", "push", "update-ref")
-LOCAL_TOOLS = ("Bash", "WebFetch", "WebSearch", "Agent", "Task", "TaskOutput",
-               "TaskStop", "Skill", "TodoWrite", "ToolSearch", "LSP", "Grep", "Glob")
-SHELL_DENY = tuple("Bash(git %s:*)" % command for command in GIT_MUTATING) + (
-    "Bash(ssh:*)", "Bash(rsync:*)") + tuple(
+STANDARD_TOOLS = ("Bash", "WebFetch", "WebSearch", "Agent", "Task", "TaskOutput",
+                  "TaskStop", "Skill", "TodoWrite", "ToolSearch", "LSP", "Grep", "Glob")
+REMOTE_COMMANDS = ("ssh", "scp", "sftp", "rsync")
+REMOTE_ALLOW = tuple("Bash(%s *)" % command for command in REMOTE_COMMANDS)
+SHELL_DENY = tuple("Bash(git %s:*)" % command for command in GIT_MUTATING) + tuple(
         "Bash(git worktree %s:*)" % command
         for command in ("add", "remove", "move", "prune", "repair", "lock", "unlock")) + tuple(
         "Bash(git branch %s:*)" % flag for flag in ("-d", "-D", "-m", "-M", "-c", "-C", "--delete", "--move", "--copy"))
@@ -313,7 +316,7 @@ def build_settings(policy, worktree, repository, protected_paths):
     if profile == "workspace":
         # Grep/Glob plus the non-filesystem tools; file writes only travel
         # through the scoped Edit rules above (Write(path) never matches).
-        allow += list(LOCAL_TOOLS)
+        allow += list(STANDARD_TOOLS) + list(REMOTE_ALLOW)
     allow += read_rules + edit_rules
 
     deny = list(deny_user)

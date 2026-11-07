@@ -27,8 +27,10 @@ DeepSeek 관리 태스크다. Claude native Agent/Workflow를 조용히 대신 �
 role: planner/researcher/implementer/test-author/runner/analyst/reviewer는 기본 DeepSeek에 배정한다.
 GPU/CPU Compute Job 운영은 role=compute-runner와 profile=qwen에 배정한다. 명세에 compute_job을 넣는다.
 작업 명령·대상·경로·자원·검증·예산을 고정한 뒤 실행기가 실제 잡을 실행하며 Qwen은 결과를 보고한다.
-GPU 점유 추측, 수동 SSH·재실행·실험 코드 수정은 Qwen에게 맡기지 않는다. 실패 원인 분석과 코드 변경은 DeepSeek에 위임한다.
+GPU 점유 추측, 잡 재실행·실험 코드 수정은 Qwen에게 맡기지 않는다. 해당 잡의 호스트에서 SSH 로그 조회·산출물 회수는 가능하다. 실패 원인 분석과 코드 변경은 DeepSeek에 위임한다.
 permission_profile 기본 workspace는 필요한 파일 도구·Bash·검색·에이전트 도구를 사전 허용한다.
+SSH/scp/sftp/rsync도 명시적으로 허용한다. 원격 조사·환경 구성·전송·일반 명령은 DeepSeek에
+실제 SSH 호스트·원격 경로·작업 범위·예산을 고정해 맡긴다. 기존 deny/ask를 지우거나 우회하지 않는다.
 외부 입력은 read_paths, 임시 출력은 scratch_paths로 명시한다. read_paths의 데이터는 수정하지 않는다.
 기존 settings.json의 allow/ask/deny를 쓰려면 permissions_file을 지정하고, workspace의 넓은 허용을 추가하지 않으려면 custom 프로필을 쓴다. 기존 CLI allow/ask/deny는 계속 병합된다.
 권한 거절은 permission_denied로 실패하므로 결과의 거절 도구와 설정 경로를 확인한다. 우회 옵션으로 재실행하지 않는다.
@@ -46,9 +48,12 @@ CLI가 자체 HTTP 기본값을 넣는 동작은 별개다.
 그 외에는 자동 stash/commit하지 않는다. inputs는 생산 태스크의 검증된 파일을 읽기 위한 복사이며 소스 통합이 아니다.
 중간 결과가 변경/재시도되어 고정된 해시와 다르면 소비 태스크를 새로 등록한다.
 
-기본 계산 대상은 local(현재 컴퓨터/보통 WSL)이다. 명시된 compute_job만 SSH 호스트에서 계산할 수 있다.
+기본 작업 공간과 최종 검증은 local(현재 컴퓨터/보통 WSL)이다. 일반 원격 명령도 사용할 수 있으며,
+자원 대기·GPU 배정·원격 취소가 필요한 잡은 compute_job을 사용한다.
 사용자가 지정한 SSH 별칭·절대 작업 경로·명령·검증·GPU 후보·대기/실행 제한을 고정한다.
-원격 소스를 자동 복사하거나 Git 상태를 바꾸지 않는다. 코드 대응이 필요하면 expected_commit으로 준비된 clean revision을 고정한다.
+원격 소스를 자동 복사하거나 Git 상태를 바꾸지 않는다. 필요한 scp/rsync 전송은 태스크 계약에 명시한다.
+직접 SSH의 원격 코드·결과는 로컬 diff로 검증되지 않으므로 revision·종료 코드·산출물 근거를 별도 확인한다.
+Compute Job의 코드 대응이 필요하면 expected_commit으로 준비된 clean revision을 고정한다.
 자원 대기·GPU별 잠금·프로세스 그룹·연결 단절 lease는 실행기가 관리한다. 다른 사용자의 실행을 중단하지 않는다.
 실패한 worktree/결과를 삭제하거나 자동 merge·push하지 않는다. worktree는 보안 샌드박스가 아니다.
 

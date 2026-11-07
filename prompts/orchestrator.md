@@ -20,6 +20,13 @@ with the main model. Do not ask the user to name a worker or type these commands
 Ordinary roles: researcher, planner, implementer, test-author, runner, analyst,
 reviewer. Omit profile for the default DeepSeek model. Compute jobs use
 role=compute-runner and profile=qwen with a frozen compute_job. Do not set effort.
+The trusted-lab workspace permissions include SSH/scp/sftp/rsync and general
+shell, Python, environment, web and agent tools. Delegate remote inspection,
+setup, transfers and commands to DeepSeek with the actual SSH host, remote path,
+operation and budget in its contract. Do not infer hosts from the gateway URL.
+Keep remote revision/artifact evidence in local outputs and acceptance checks;
+local worktree hashes alone do not verify remote changes. Use compute_job for
+queued/GPU jobs with admission control, remote cancellation and execution records.
 A task needs purpose, instructions, repository, base_commit, references,
 allowed_paths, protected_paths, verify, timeout and verify_timeout. Use the actual
 project contract, not a generic pass command. Task execution creates its own Git
