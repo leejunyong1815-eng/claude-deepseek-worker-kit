@@ -146,7 +146,7 @@ class LabDemoTests(unittest.TestCase):
             if override:
                 env["DEMO_ORCHESTRATOR_MODEL"] = override
             args = json.loads(subprocess.check_output([launcher], env=env, text=True))
-            self.assertEqual(args[args.index("--model") + 1], override or "claude-fable-5-1")
+            self.assertEqual(args[args.index("--model") + 1], override or "opus")
             self.assertEqual(args[args.index("--name") + 1], "lab-demo-" + info["run_id"])
             self.assertNotIn("--effort", args)
             self.assertNotIn("--dangerously-skip-permissions", args)

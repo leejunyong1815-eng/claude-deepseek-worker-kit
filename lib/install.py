@@ -46,6 +46,29 @@ def write(path, values):
             os.unlink(temp)
 
 
+def configure_gateway(conf, replace=False):
+    """One private connection for every worker profile; profile files retain models."""
+    target = conf / "gateway.env"
+    if target.is_file() and not replace:
+        return
+    values = load(conf / "env") if (conf / "env").is_file() else {}
+    if not values:
+        candidates = sorted(conf.glob("env.*"))
+        values = load(candidates[0]) if candidates else dict(BACKEND_DEFAULTS)
+    url = values.get("LLM_BASE_URL", BACKEND_DEFAULTS["LLM_BASE_URL"])
+    # Do not forward a previous server's key when creating the new lab gateway.
+    if url.rstrip("/") == "http://133.186.146.224:8081":
+        values = dict(BACKEND_DEFAULTS)
+    connection = {k: values.get(k, "") for k in ("LLM_BASE_URL", "LLM_AUTH_MODE", "LLM_API_KEY")}
+    connection["LLM_BASE_URL"] = values.get("LLM_BASE_URL", BACKEND_DEFAULTS["LLM_BASE_URL"])
+    connection["LLM_AUTH_MODE"] = values.get("LLM_AUTH_MODE", "api_key" if values.get("LLM_API_KEY") else "none")
+    if target.is_file():
+        backup = Path(tempfile.mkdtemp(prefix="gateway-backup.", dir=conf))
+        shutil.copy2(target, backup / target.name)
+    write(target, connection)
+    print("Shared worker gateway configured (credentials hidden).")
+
+
 def render(conf):
     for path in sorted(conf.glob("env*")):
         if path.name != "env" and not path.name.startswith("env."):
@@ -200,6 +223,8 @@ def main():
             backup = Path(tempfile.mkdtemp(prefix="backend-backup.", dir=conf))
             shutil.copy2(target, backup / target.name)
         write(target, values)
+    configure_gateway(conf, replace=(not args.profile and values is not None and
+                                    (args.migrate_backend or os.environ.get("FORCE_ENV") == "1")))
     render(conf)
     print("Prompts rendered. Code workspace: local/WSL; explicit compute jobs may use SSH. Worker effort is left to Claude/backend defaults.")
     if args.probe:

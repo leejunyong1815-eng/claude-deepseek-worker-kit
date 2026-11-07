@@ -122,6 +122,7 @@ class ManagedTasks(unittest.TestCase):
         (conf / "env").write_text(config)
         (conf / "env.impl").write_text(config)
         (conf / "env.qwen").write_text(config)
+        (conf / "gateway.env").write_text(config)
         self.env = dict(os.environ, PATH=str(self.mock) + os.pathsep + os.environ["PATH"],
                         DEEPSEEK_WORKER_CONF_DIR=str(conf), PYTHONDONTWRITEBYTECODE="1", XDG_STATE_HOME=str(self.root / "runtime"))
         # Do not inherit the test runner's Git overrides.
@@ -526,6 +527,20 @@ class ManagedTasks(unittest.TestCase):
         spec["verify"] = ["true"]
         registered.write_text(json.dumps(spec))
         self.assertEqual(self.call("run", task, check=False).returncode, 2)
+
+    def test_shared_gateway_key_is_redacted_and_rejected_in_specs(self):
+        gateway = Path(self.env["DEEPSEEK_WORKER_CONF_DIR"]) / "gateway.env"
+        gateway.write_text(gateway.read_text().replace("offline-secret-12345", "gateway-only-secret-98765"))
+        state = self.run_task(self.submit("secret", verify=["true"]))
+        for filename in [state["logs"]["worker_stderr"], state["diff_path"]]:
+            text = Path(filename).read_text()
+            self.assertNotIn("gateway-only-secret-98765", text)
+            self.assertIn("[REDACTED]", text)
+        spec = self.root / "spec.json"
+        data = json.loads(spec.read_text())
+        data["instructions"] = "gateway-only-secret-98765"
+        spec.write_text(json.dumps(data))
+        self.assertEqual(self.call("submit", spec, check=False).returncode, 2)
 
     def test_control_file_and_background_children(self):
         state = self.run_task(self.submit("control", allowed_paths=["*"]), False)

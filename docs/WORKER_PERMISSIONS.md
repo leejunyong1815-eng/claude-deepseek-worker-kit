@@ -4,6 +4,9 @@
 `deepseek-task run`은 별도 `claude -p` 프로세스이므로 필요한 규칙을 실행 전에 전달한다.
 이전 버전은 crossSessionInbound만 설정했고, 비대화 워커에 사용할 도구 허용 규칙을 준비하지 않았다.
 
+`deepseek-main`은 별도 제한을 사용한다. 메인의 Agent·Task·Workflow·TeamCreate·Skill을 제외하고
+Bash의 관리 CLI로 위임한다. 아래 일반 도구 허용은 워커에 적용하며, 메인의 차단 환경변수는 워커에 전달하지 않는다.
+
 ## 프로필
 
 | permission_profile | 동작 |

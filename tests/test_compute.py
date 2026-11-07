@@ -195,6 +195,26 @@ a=shlex.split(sys.argv[-1]);os.execvp(a[0],a)
         self.assertEqual(result['state'],'cancelled',err)
         self.assertEqual(result['reason'],'heartbeat_lost')
 
+    def test_coalesced_events_publish_running_before_the_job_finishes(self):
+        (self.mock/'ssh').write_text("""#!/usr/bin/env python3
+import hashlib,json,sys,time
+request=json.loads(sys.stdin.readline())
+base={'run_id':request['run_id'],'spec_digest':hashlib.sha256(json.dumps(request['job'],sort_keys=True).encode()).hexdigest()}
+sys.stdout.write(json.dumps(dict(base,state='waiting'))+'\\n'+json.dumps(dict(base,state='running'))+'\\n');sys.stdout.flush()
+time.sleep(1.5)
+print(json.dumps(dict(base,state='succeeded')),flush=True)
+""")
+        p,f=self.start(dict(self.job,transport='ssh',ssh_host='fixture',resource='cpu'))
+        deadline=time.monotonic()+.8
+        seen=False
+        while time.monotonic()<deadline:
+            if f.exists() and json.loads(f.read_text()).get('state')=='running':
+                seen=True;break
+            time.sleep(.01)
+        self.assertTrue(seen,'second event was buffered until the next server write')
+        self.assertIsNone(p.poll())
+        self.assertEqual(self.finish(p,f)['state'],'succeeded')
+
     def test_unknown_gpu_telemetry_does_not_run_job(self):
         (self.mock / 'nvidia-smi').write_text('#!/bin/sh\necho "0, GPU-zero, N/A, N/A"\n')
         p, f = self.start()

@@ -14,8 +14,13 @@
 - 설정 디렉터리의 `kit_dir`를 현재 키트 경로로 갱신
 - 기존 `worker.md`·`worker.<프로필>.md`와 `roles/`를 `prompt-backup.*`에 백업
 - 기본·추가 프로필의 생성 프롬프트 재렌더링과 역할 프롬프트 갱신
+- 공통 연결 파일 `gateway.env`가 없으면 최초 생성 (권한 `0600`)
 
 `env`, `env.<프로필>`, 프로젝트 파일, API 키, 모델·컨텍스트 설정은 변경하지 않는다.
+기존 `gateway.env`도 유지한다. 처음 생성할 때 기본 env의 연결을 사용하며, 알려진 이전 주소
+`http://133.186.146.224:8081`만 현재 기본 `http://1.233.219.161:4000`으로 옮긴다.
+이 경우 이전 서버의 키를 새 게이트웨이에 복사하지 않는다. 다른 사용자 지정 URL은 유지한다.
+이후 모든 워커와 deepseek-probe는 공통 파일의 연결을 사용한다. env.<프로필>의 URL·인증은 사용하지 않는다.
 서버 조회·프로브·모델 호출·새 프로필 생성도 하지 않는다. 설정 갱신에는 실제 Claude CLI나 서버가 필요하지 않다.
 `./install.sh --check` 또는 설치된 `deepseek-doctor`로 로컬 필수 도구와 Claude CLI를 확인할 수 있다. API는 호출하지 않는다.
 PATH를 Bash에 등록하려면 `./install.sh --update --setup-path`를 사용한다. 생성된 shell.sh를 ~/.bashrc에서 한 번 읽게 하며 기존 설정은 보존한다.
@@ -83,9 +88,12 @@ apply가 출력한 개별 백업 폴더는 다음과 같다.
 > 기존 대화의 옛 운영 지침 대신 갱신한 규칙을 적용하고, 필요한 외부 데이터는 read_paths에 넣어 줘.
 > permission_denied가 발생하면 원인을 보고하고, 조용히 메인 직접 구현으로 대체하지 마.
 
-이전 세션의 system prompt는 resume 시 그대로 유지될 수 있다. 새 --append-system-prompt 문구가
-resume만으로 반영된다고 가정하지 않는다. 새 대화를 시작하거나, CLI 2.1.257 이상에서는 필요할 때
-`--system-prompt-snapshot off`를 명시할 수 있다. [공식 설명](https://code.claude.com/docs/en/cli-reference#system-prompt-flags-in-resumed-conversations).
+`deepseek-main`은 기본 모델 Opus와 `--system-prompt-snapshot off`를 지정한다. CLI 2.1.257 이상이 필요하다.
+기존 메인을 종료하고 `deepseek-main --resume`으로 재개하면 최신 런처 지침을 다시 적용하며,
+Agent/Task/Workflow/TeamCreate/Skill 도구를 제외한다. fork형 Skill도 막기 위해 Skill 전체를 제외한다.
+추가 컨텍스트는 `--append-system-prompt`로 전달할 수 있고 필수 위임 지침과 합쳐진다.
+이 옵션으로 데모 지침을 넣어도 기본 정책이 사라지지 않는다. 다른 claude 런처에는 적용되지 않는다.
+프로젝트별 문서 재독은 여전히 필요하다. [공식 resume 옵션](https://code.claude.com/docs/en/cli-reference#system-prompt-flags-in-resumed-conversations).
 대화형 워커의 업데이트된 역할 프롬프트가 필요하면 새 워커 세션을 시작한다.
 
 기존 태스크의 기준 커밋과 명세는 바뀌지 않는다. 실패/중단한 태스크는 --retry로 새 시도를 만들 수 있지만
@@ -94,16 +102,21 @@ resume만으로 반영된다고 가정하지 않는다. 새 대화를 시작하�
 
 ## 2026-11 LiteLLM / Qwen 구성
 
---update는 기존 env를 바꾸지 않는다. 이전 연구실 서버에서 새 기본값으로 옮기려면
+--update는 기존 env를 바꾸지 않고 위의 공통 게이트웨이를 생성한다. 모델·컨텍스트까지 새 기본값으로 옮기려면
 `./install.sh --migrate-backend --non-interactive`를 명시적으로 실행한다. 대상 env를 백업하고
 키/인증 모드와 사용자 값을 유지하며 URL·DeepSeek 모델·컨텍스트를 갱신한다.
-`--profile impl`처럼 프로필을 지정하면 그 env만 갱신한다. qwen 프로필은 Qwen 모델을 사용한다.
+기본 프로필의 명시적 마이그레이션은 `gateway.env`도 백업 후 갱신한다.
+`--profile impl`처럼 프로필을 지정하면 그 env만 갱신하고 공통 연결은 바꾸지 않는다. qwen 프로필은 Qwen 모델을 사용한다.
 
-새 Qwen 프로필은 `./install.sh --profile qwen --non-interactive`, 기존 프로필의 이전 주소 갱신은
+새 Qwen 프로필은 `./install.sh --profile qwen --non-interactive`, 기존 프로필의 모델·컨텍스트 갱신은
 `./install.sh --migrate-backend --profile qwen --non-interactive`다.
 새 프록시의 기본 인증 모드는 none이며 Claude CLI에 전달하는 litellm-no-auth는 비밀 키가 아닌
 클라이언트용 식별자다. 기존 키 인증 설정은 자동으로 해제하지 않는다.
 프로젝트 규칙도 deepseek-project-update로 비교·적용하고 재개한 메인에 새 역할 규칙을 다시 읽게 한다.
+
+연결을 직접 관리한다면 `gateway.env`의 LLM_BASE_URL·LLM_AUTH_MODE·LLM_API_KEY만 수정하고 권한 `0600`을 유지한다.
+변경은 다음 워커 실행부터 적용된다. 공통 연결을 삭제해도 프로필 주소로 돌아가지 않고 실행을 거절한다.
+Opus 메인은 Claude 계정으로 접속하며 이 파일을 사용하지 않는다.
 
 ## effort 전달 제거
 

@@ -1,5 +1,9 @@
 # ORCHESTRATOR
 
+Opus 메인은 Claude 계정, DeepSeek·Qwen 워커는 공통 게이트웨이를 사용한다.
+메인의 native Agent/Task/Workflow/팀/Skill과 직접 claude 실행은 런처에서 제한한다.
+관리 워커는 이 오케스트레이터 절차를 재실행하지 않고 자신의 태스크 계약을 따른다.
+
 사용자는 원하는 결과를 말한다. 너는 계약을 정하고 DeepSeek에 조사·설계·구현·테스트 초안·실행·분석·리뷰를 맡긴다.
 매번 사용자에게 워커 이름이나 관리 명령을 작성하게 하지 않는다. 일반 서브에이전트 업무의 기본 실행 경로는
 DeepSeek 관리 태스크다. Claude native Agent/Workflow를 조용히 대신 사용하지 않는다.
@@ -28,7 +32,7 @@ permission_profile 기본 workspace는 필요한 파일 도구·Bash·검색·�
 외부 입력은 read_paths, 임시 출력은 scratch_paths로 명시한다. read_paths의 데이터는 수정하지 않는다.
 기존 settings.json의 allow/ask/deny를 쓰려면 permissions_file을 지정하고, workspace의 넓은 허용을 추가하지 않으려면 custom 프로필을 쓴다. 기존 CLI allow/ask/deny는 계속 병합된다.
 권한 거절은 permission_denied로 실패하므로 결과의 거절 도구와 설정 경로를 확인한다. 우회 옵션으로 재실행하지 않는다.
-profile은 서버·모델 설정을 고르고 role은 실행 프롬프트를 고른다. 기본 프로필 하나로 모든 역할을 사용할 수 있다.
+profile은 모델·컨텍스트 설정을 고르고 role은 실행 프롬프트를 고른다. 연결은 공통 gateway.env를 쓴다. 기본 프로필 하나로 모든 일반 역할을 사용할 수 있다.
 effort는 생략한다. 이전 명세/프로필의 effort는 보존하지만 워커 CLI로 전달하지 않는다.
 CLI가 자체 HTTP 기본값을 넣는 동작은 별개다.
 기본 120턴·1800초와 검증 명령별 300초를 사용한다. max_turns(1–1000)와 시간 예산을 명시한다.

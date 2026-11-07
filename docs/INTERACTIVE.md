@@ -3,6 +3,8 @@
 `deepseek-worker`는 기존 Claude Code 세션 간 메시징을 유지한다.
 `deepseek-duo -w 2`는 메인 하나와 이름이 다른 워커 둘을 tmux에 연다.
 `deepseek-duo -w 0 -P impl,review`처럼 설치된 프로필을 사용할 수도 있다.
+메인은 기본 Opus로 Claude 계정에, 모든 워커는 공통 gateway.env의 연구실 게이트웨이에 접속한다.
+메인의 native Agent·Workflow·Skill 제한은 유지되며 기존 세션 간 메시징은 사용할 수 있다.
 
 가벼운 질문·논의나 이미 관리자가 분리한 작업 공간에서 수동 운영할 때 사용한다.
 수동 세션에는 task ID·자동 worktree 격리·외부 성공 판정이 없다.

@@ -45,7 +45,9 @@ def run(spec, result):
             process.stdin.write(json.dumps({'job':job, 'run_id':run_id}) + '\n')
             process.stdin.flush()
             selector = selectors.DefaultSelector()
+            os.set_blocking(process.stdout.fileno(), False)
             selector.register(process.stdout, selectors.EVENT_READ)
+            pending = b""
             heartbeat = time.monotonic()
             deadline = heartbeat + job['wait_timeout'] + job['timeout'] + len(job['verify']) * job['verify_timeout'] + 30
             cancellation_sent = None
@@ -69,15 +71,24 @@ def run(spec, result):
                         except (OSError, ValueError):
                             pass
                     for key, _ in selector.select(.1):
-                        line = key.fileobj.readline()
-                        if not line:
+                        # TextIO.readline may read ahead: a second complete event can sit
+                        # in its buffer while select sees no bytes, stalling status updates.
+                        data = os.read(key.fd, 65536)
+                        if not data:
                             selector.unregister(key.fileobj)
+                            if pending.strip():
+                                raise ValueError('incomplete executor event')
                             continue
-                        update = json.loads(line)
-                        if update.get('run_id') != run_id or update.get('spec_digest') != checksum(job):
-                            raise ValueError('executor identity mismatch')
-                        state.update(update)
-                        atomic(result, state)
+                        pending += data
+                        while b'\n' in pending:
+                            line, pending = pending.split(b'\n', 1)
+                            if not line.strip():
+                                continue
+                            update = json.loads(line)
+                            if update.get('run_id') != run_id or update.get('spec_digest') != checksum(job):
+                                raise ValueError('executor identity mismatch')
+                            state.update(update)
+                            atomic(result, state)
                     if process.poll() is not None and not selector.get_map():
                         break
                     if cancellation_sent and current - cancellation_sent > job['heartbeat_timeout'] + 5:

@@ -1,8 +1,10 @@
 # Claude + DeepSeek / Qwen Worker Kit
 
 Claude Code에서 DeepSeek를 서브에이전트로 쓰기 위한 CLI 도구입니다.
-Claude가 작업을 나누고 결과를 검토하며, DeepSeek가 조사·설계·구현·테스트·분석·리뷰를 맡습니다.
+메인 Opus는 Claude 계정으로 실행해 작업을 나누고 결과를 검토합니다.
+DeepSeek가 조사·설계·구현·테스트·분석·리뷰를 맡습니다.
 Qwen은 지정된 Compute Job의 실행 결과와 자원·상태를 담당합니다. GPU 유휴 확인·대기·잠금·취소는 실행기가 처리합니다.
+DeepSeek·Qwen과 그 하위 모델 호출은 공통 게이트웨이 `http://1.233.219.161:4000`을 사용합니다.
 코드 작업은 로컬/WSL의 별도 worktree에서 하고, 계산 잡은 명세에 지정한 로컬 컴퓨터나 SSH 호스트에서 실행합니다.
 
 [claude-local-worker-kit](https://github.com/leejunyong1815-eng/claude-local-worker-kit)에서 분리한 버전입니다.
@@ -26,7 +28,8 @@ claude auth login
 ```
 
 Claude Code는 WSL 안에 설치합니다. 설치·로그인 방법은 [공식 문서](https://code.claude.com/docs/en/setup)를 참고하세요.
-이 키트는 Python 3.9 이상과 `--name`을 지원하는 Claude Code 2.1.224 이상을 사용합니다.
+이 키트는 Python 3.9 이상과 Claude Code 2.1.257 이상을 사용합니다.
+메인 도구 제한과 resume 지침 갱신에 필요한 CLI 옵션을 `--check`에서 검사합니다.
 `tmux`는 `deepseek-duo`를 사용할 때만 필요합니다 (`sudo apt install tmux`).
 
 ### 2. 저장소 받기
@@ -57,7 +60,9 @@ deepseek-doctor
 
 URL, 모델, 컨텍스트는 Enter로 기본값을 사용합니다. 현재 연구실 LiteLLM은 키 없이 호출할 수 있어
 새 설치는 `LLM_AUTH_MODE=none`을 사용합니다. 인증이 필요한 서버에서는 `LLM_AUTH_MODE=api_key ./install.sh`로
-설치하고 키를 숨김 입력합니다. 설정은 `~/.config/deepseek-worker/env`에 `0600`으로 저장합니다.
+설치하고 키를 숨김 입력합니다. 연결 URL·인증은 `~/.config/deepseek-worker/gateway.env`에,
+모델·컨텍스트·역할은 `env`, `env.<프로필>`에 `0600`으로 저장합니다.
+모든 워커 프로필은 같은 `gateway.env`를 읽습니다. 이전 프로필 파일의 URL·키는 연결에 사용하지 않습니다.
 메인 Claude 계정 로그인과 워커의 서버 인증은 별도입니다.
 
 | 설정 | 기본값 |
@@ -97,14 +102,20 @@ deepseek-project-init .
 deepseek-main
 ```
 
-`deepseek-project-init`은 기존 파일을 덮어쓰지 않습니다. 첫 세션에서 생성된 `KICKOFF_PROMPT.md`를 붙여 넣은 뒤 작업을 요청합니다.
+`deepseek-project-init`은 기존 파일을 덮어쓰지 않습니다. `deepseek-main`은 기본 모델을 Opus로 선택하고
+실행할 때마다 위임 지침을 추가합니다. 생성된 `KICKOFF_PROMPT.md`에는 프로젝트별 작업 시작 절차가 있습니다.
 
 > CSV 입력 검증 기능을 구현해 줘. 잘못된 입력을 처리하고 테스트도 추가해 줘.
 
-프로젝트 규칙에 따라 메인이 필요한 DeepSeek 태스크를 등록하고 실행합니다.
+메인이 필요한 DeepSeek 태스크를 등록하고 실행합니다.
 사용자가 워커 이름이나 task ID를 지정할 필요는 없습니다.
 조사부터 모듈 전체 구현, 테스트 초안, 독립 리뷰까지 맡길 수 있으며 완료 조건과 최종 반영은 메인이 검토합니다.
 테스트 초안은 `candidate-tests/`에 받고, 검토 후 프로젝트 테스트에 반영합니다.
+
+메인의 자체 Agent·Task·Workflow·팀 생성과 fork형 Skill은 런처에서 차단합니다.
+Skill 도구 전체가 메인에서 제외되며, 메인은 Bash로 `deepseek-task`를 사용합니다.
+`deepseek-main --resume`에도 같은 도구 제한과 최신 실행 지침을 적용합니다.
+일반 `claude`로 실행하면 이 설정이 적용되지 않습니다. 워커의 일반 도구 권한은 유지합니다.
 
 | 역할 | 작업 |
 |---|---|
@@ -128,7 +139,8 @@ Qwen은 고정된 결과를 읽어 보고서를 씁니다. 모델이 GPU 상태�
 CPU 모사와 SSH GPU 잡 명세는 [Compute Job 문서](docs/COMPUTE_JOBS.md)에 있습니다.
 
 역할은 태스크 명세의 `role`로 선택합니다. 일반 역할은 기본 DeepSeek 프로필을 공유합니다. Compute Job은 Qwen 프로필을 사용합니다.
-연결 설정을 나눠야 한다면 `./install.sh --profile review --non-interactive`처럼 프로필을 추가합니다.
+모델·컨텍스트·역할 설정을 나누려면 `./install.sh --profile review --non-interactive`처럼 프로필을 추가합니다.
+프로필을 추가해도 연결 게이트웨이는 바뀌지 않습니다.
 
 ## 태스크 실행과 검증
 
@@ -201,14 +213,18 @@ git pull --ff-only
 ./install.sh --update
 ```
 
-기존 API 키, 모델, 컨텍스트 설정을 유지하고 실행 파일과 프롬프트를 갱신합니다.
-기존 설정의 주소·모델·컨텍스트도 유지되므로, 이전 연구실 서버에서 옮길 때는 아래를 추가 실행합니다.
-선택한 프로필의 키와 사용자 설정을 보존하고 이전 env를 백업합니다.
+실행 파일과 프롬프트를 갱신하고 기존 모델·컨텍스트·프로필 파일을 보존합니다.
+공통 `gateway.env`가 없으면 기존 기본 연결에서 한 번 생성합니다. 알려진 이전 연구실 주소
+`133.186.146.224:8081`은 새 기본 게이트웨이로 옮기며 이전 서버의 키를 전달하지 않습니다.
+이미 공통 설정이 있으면 유지합니다. 다른 사용자 지정 서버는 자동 변경하지 않습니다.
+
+모델·컨텍스트까지 현재 기본값으로 옮기려면 아래를 실행합니다. 기본 프로필의 명시적
+`--migrate-backend`는 공통 게이트웨이도 백업 후 갱신합니다. 인증은 기존 설정을 따릅니다.
 
 ```bash
 ./install.sh --migrate-backend --non-interactive
 ./install.sh --profile qwen --non-interactive
-# 이미 설치된 qwen / impl 같은 프로필도 이전 서버를 가리키면 해당 프로필을 명시한다.
+# 기존 qwen 프로필의 모델·컨텍스트도 갱신할 때만 실행한다.
 ./install.sh --migrate-backend --profile qwen --non-interactive
 ```
 
@@ -220,8 +236,9 @@ deepseek-project-update --apply /path/to/project
 ```
 
 사용자가 수정한 파일은 유지하고 새 템플릿은 백업 폴더의 `incoming/`에 남깁니다.
-기존 메인 대화는 `deepseek-main --resume`으로 이어갈 수 있습니다. 갱신한 AGENTS·ORCHESTRATOR를 다시 읽게 하며,
-새 권한은 새 관리 워커 실행부터 적용됩니다. 백업·resume·충돌 처리 방법은 [업데이트 문서](docs/UPDATING.md), 기존 키트와의 차이는 [마이그레이션 문서](docs/MIGRATION.md)에 있습니다.
+기존 메인을 종료한 뒤 `deepseek-main --resume`으로 이어갑니다. 런처가 최신 위임 지침과 도구 제한을 적용합니다.
+프로젝트별로 수정한 AGENTS·ORCHESTRATOR는 다시 읽게 하세요. 실행 중인 세션과 워커는 자동 재시작하지 않습니다.
+백업·resume·충돌 처리 방법은 [업데이트 문서](docs/UPDATING.md), 기존 키트와의 차이는 [마이그레이션 문서](docs/MIGRATION.md)에 있습니다.
 
 ## 테스트와 데모
 

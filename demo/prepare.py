@@ -91,7 +91,7 @@ conditioning and probability-distribution fidelity must be labeled as such.
              'cd "$(dirname "$(readlink -f "$0")")"\n'
              f'export ORCHESTRATOR_NAME="lab-demo-{run_id}"\n'
              f"exec {shlex.quote(str(KIT / 'bin/deepseek-main'))} "
-             '--model "${DEMO_ORCHESTRATOR_MODEL:-claude-fable-5-1}" '
+             '--model "${DEMO_ORCHESTRATOR_MODEL:-opus}" '
              '--append-system-prompt "$(cat DEMO_ORCHESTRATOR.md)" "$@"\n')
     (workspace / "start.sh").write_text(start)
     (workspace / "start.sh").chmod(0o755)

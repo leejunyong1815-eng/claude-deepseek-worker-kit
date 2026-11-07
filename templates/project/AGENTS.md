@@ -1,6 +1,10 @@
 # Claude 오케스트레이터 + DeepSeek 위임 규칙
 
-사용자가 목표를 말하면 오케스트레이터가 필요한 워커를 직접 호출한다.
+관리 워커(DEEPSEEK_TASK_MANAGED=1)는 배정된 태스크 계약과 역할을 수행한다. 아래 오케스트레이터 절차로
+자기 태스크를 다시 등록하거나 deepseek-main을 실행하지 않는다. 작업 공간·검증·보존 규칙은 동일하게 적용한다.
+
+메인은 기본 Opus이며 Claude 계정을 사용한다. 사용자가 목표를 말하면 필요한 관리 워커를 직접 호출한다.
+메인의 native Agent/Task/Workflow/팀/fork Skill은 런처에서 차단된다. 워커 모델은 공통 gateway.env를 사용한다.
 조사·설계 초안·모듈 구현·테스트 초안·실행·분석·독립 리뷰를 DeepSeek 관리 태스크에 먼저 배정한다.
 정책과 절차는 agents/ORCHESTRATOR.md, 역할은 agents/ROLE_*.md를 읽는다.
 

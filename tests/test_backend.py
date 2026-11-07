@@ -20,7 +20,7 @@ class BackendTests(unittest.TestCase):
         mock.mkdir()
         (mock / 'claude').write_text('''#!/usr/bin/env python3
 import json,os,sys
-print(json.dumps({'args': sys.argv[1:], 'env': {k:v for k,v in os.environ.items() if k.startswith(('ANTHROPIC_', 'CLAUDE_CODE_')) or k in ('MAX_THINKING_TOKENS','LLM_EFFORT','DEEPSEEK_WORKER_EFFORT')}}))
+print(json.dumps({'args': sys.argv[1:], 'env': {k:v for k,v in os.environ.items() if k.startswith(('ANTHROPIC_', 'CLAUDE_CODE_')) or k in ('MAX_THINKING_TOKENS','LLM_EFFORT','DEEPSEEK_WORKER_EFFORT','DEEPSEEK_MAIN_MANAGED_DELEGATION','CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS')}}))
 ''')
         (mock / 'curl').write_text('#!/bin/sh\ntouch "$NETWORK_MARKER"\nexit 99\n')
         for p in mock.iterdir():
@@ -77,6 +77,7 @@ print(json.dumps({'args': sys.argv[1:], 'env': {k:v for k,v in os.environ.items(
         self.assertEqual(base['env']['ANTHROPIC_MODEL'], 'deepseek-v4.1-flash')
         self.assertEqual(qwen['env']['ANTHROPIC_MODEL'], 'qwen3.8-flash-next')
         self.assertEqual(base['env']['ANTHROPIC_AUTH_TOKEN'], 'litellm-no-auth')
+        self.assertEqual((self.conf/'gateway.env').stat().st_mode & 0o777,0o600)
         self.assertIn('Compute job operator (Qwen)', qwen['args'][qwen['args'].index('--append-system-prompt')+1])
 
     def test_configuration_is_private_offline_and_all_tiers_use_exact_alias(self):
@@ -117,6 +118,63 @@ print(json.dumps({'args': sys.argv[1:], 'env': {k:v for k,v in os.environ.items(
                      'CLAUDE_CODE_EFFORT_LEVEL', 'CLAUDE_CODE_MAX_CONTEXT_TOKENS', 'MAX_THINKING_TOKENS',
                      'CLAUDE_CODE_SUBAGENT_MODEL_FORCE','CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL','CLAUDE_CODE_MAX_OUTPUT_TOKENS'):
             self.assertNotIn(name, data['env'])
+
+    def test_main_defaults_to_opus_blocks_native_delegation_and_merges_context(self):
+        self.install('--install-only')
+        data=json.loads(subprocess.check_output([str(self.prefix/'deepseek-main'),'--resume','existing',
+              '--append-system-prompt','Demo context','--disallowedTools','WebFetch','-p','work'],env=self.env,text=True))
+        args=data['args']
+        self.assertEqual(args[args.index('--model')+1],'opus')
+        self.assertEqual(args[args.index('--system-prompt-snapshot')+1],'off')
+        start=args.index('--disallowedTools')+1
+        self.assertTrue({'Agent','Task','Workflow','TeamCreate','Skill','WebFetch'} <= set(args[start:args.index('--system-prompt-snapshot')]))
+        text=args[args.index('--append-system-prompt')+1]
+        self.assertIn('deepseek-task submit',text)
+        self.assertIn('Demo context',text)
+        self.assertEqual(data['env']['CLAUDE_CODE_DISABLE_EXPLORE_PLAN_AGENTS'],'1')
+        self.assertEqual(data['env']['CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS'],'1')
+        self.assertIn('--resume',args)
+        result=subprocess.run([str(self.prefix/'deepseek-main'),'--system-prompt-snapshot','on'],env=self.env,capture_output=True)
+        self.assertEqual(result.returncode,2)
+
+    def test_all_worker_profiles_use_one_gateway_even_with_stale_profile_urls(self):
+        self.install('--non-interactive')
+        self.install('--profile','qwen','--non-interactive')
+        p=self.conf/'env.qwen'
+        with p.open('a') as out:
+            out.write('export LLM_BASE_URL=https://old-profile.invalid\nexport LLM_API_KEY=old-private-profile-key\nexport LLM_AUTH_MODE=api_key\n')
+        env=dict(self.env, ANTHROPIC_BASE_URL='https://inherited.invalid',CLAUDE_CODE_DISABLE_EXPLORE_PLAN_AGENTS='1',
+                 CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS='1',DEEPSEEK_MAIN_MANAGED_DELEGATION='1')
+        data=json.loads(subprocess.check_output([str(self.prefix/'qwen-worker'),'-p','job'],env=env,text=True))
+        self.assertEqual(data['env']['ANTHROPIC_BASE_URL'],'http://1.233.219.161:4000')
+        self.assertEqual(data['env']['ANTHROPIC_AUTH_TOKEN'],'litellm-no-auth')
+        self.assertEqual(data['env']['ANTHROPIC_MODEL'],'qwen3.8-flash-next')
+        for k in ('CLAUDE_CODE_DISABLE_EXPLORE_PLAN_AGENTS','CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS','DEEPSEEK_MAIN_MANAGED_DELEGATION'):
+            self.assertNotIn(k,data['env'])
+        gateway=(self.conf/'gateway.env').read_bytes()
+        self.install('--update')
+        self.assertEqual((self.conf/'gateway.env').read_bytes(),gateway)
+        self.assertIn('https://old-profile.invalid',p.read_text())
+
+    def test_missing_shared_gateway_does_not_fall_back_to_profile_connection(self):
+        self.install('--non-interactive')
+        (self.conf/'gateway.env').unlink()
+        p=subprocess.run([str(self.prefix/'deepseek-worker'),'-p','do not run'],env=self.env,capture_output=True,text=True)
+        self.assertEqual(p.returncode,2)
+        self.assertIn('shared gateway missing',p.stderr)
+        self.assertFalse(p.stdout)
+
+    def test_update_migrates_known_old_server_without_forwarding_its_key(self):
+        self.install('--non-interactive')
+        (self.conf/'gateway.env').unlink()
+        config=(self.conf/'env').read_text().replace('http://1.233.219.161:4000','http://133.186.146.224:8081')
+        config += 'export LLM_AUTH_MODE=api_key\nexport LLM_API_KEY=old-server-only-key\n'
+        (self.conf/'env').write_text(config)
+        self.install('--update')
+        gateway=(self.conf/'gateway.env').read_text()
+        self.assertIn('http://1.233.219.161:4000',gateway)
+        self.assertNotIn('old-server-only-key',gateway)
+        self.assertEqual((self.conf/'env').read_text(),config)
 
     def test_legacy_profiles_and_inherited_effort_do_not_reach_either_model(self):
         self.install('--non-interactive')
@@ -203,6 +261,31 @@ class ProbeTests(unittest.TestCase):
                     self.assertTrue(bodies)
                     self.assertTrue(all('effort' not in b.get('output_config',{}) for b in bodies))
                     self.assertNotIn('messages_effort',[r['check'] for r in json.loads(output.read_text())['checks']])
+
+    def test_probe_uses_shared_gateway_not_the_selected_profile_url(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            (root/'env.qwen').write_text('export LLM_BASE_URL=https://stale.invalid\nexport LLM_MODEL=qwen3.8-flash-next\nexport LLM_API_KEY=stale-key\n')
+            (root/'gateway.env').write_text('export LLM_BASE_URL=http://1.233.219.161:4000\nexport LLM_AUTH_MODE=none\nexport LLM_API_KEY=\n')
+            with patch.dict(os.environ,{'DEEPSEEK_WORKER_CONF_DIR':str(root)}):
+                values=self.probe['config']('qwen')
+            self.assertEqual(values['LLM_BASE_URL'],'http://1.233.219.161:4000')
+            self.assertEqual(values['LLM_MODEL'],'qwen3.8-flash-next')
+            self.assertEqual(values['LLM_API_KEY'],'')
+
+    def test_probe_rejects_incomplete_shared_gateway_instead_of_using_profile_keys(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'env').write_text('export LLM_BASE_URL=https://stale.invalid\nexport LLM_MODEL=deepseek-v4.1-flash\nexport LLM_API_KEY=stale-key\n')
+            gateway = root / 'gateway.env'
+            for text in ('export LLM_AUTH_MODE=none\n',
+                         'export LLM_BASE_URL=https://lab.invalid\nexport LLM_AUTH_MODE=api_key\n'):
+                gateway.write_text(text)
+                with self.subTest(text=text), patch.dict(os.environ, {'DEEPSEEK_WORKER_CONF_DIR': str(root)}):
+                    with self.assertRaises(ValueError):
+                        self.probe['config']('')
 
     def test_probe_rejects_missing_tool_call(self):
         with self.assertRaisesRegex(ValueError, 'no tool_use'):

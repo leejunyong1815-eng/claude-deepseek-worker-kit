@@ -55,6 +55,7 @@ deepseek-task result "$TASK"                      # 검증·변경 파일·로�
 ```
 
 `profile: ""`이면 기본 프로필, `impl`이면 기존 `env.impl`과 `worker.impl.md`를 사용한다.
+프로필은 모델·컨텍스트·역할을 고르고, URL·인증은 모든 프로필이 공통 `gateway.env`에서 읽는다.
 `impl`이 없다면 키트 디렉터리에서 `./install.sh --profile impl`로 생성하거나 기본 프로필을 쓴다.
 `profile: "impl"`로 등록했다면 `deepseek-task run "$TASK" -P impl`로 프로필 일치를 확인하며 실행할 수도 있다.
 `-P`는 등록된 프로필을 바꾸는 옵션이 아니며, 다른 이름을 주면 실행을 거절한다.

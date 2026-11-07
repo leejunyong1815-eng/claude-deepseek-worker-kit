@@ -6,6 +6,8 @@
 - checkout 이동: 새 위치에서 `./install.sh --update`를 실행해 템플릿 경로를 갱신한다.
 
 - 설정 없음: `./install.sh --install-only`는 도구만 설치한다. 서버 정보를 받은 뒤 `./install.sh`로 설정한다.
+- shared gateway missing: 기존 설치는 `./install.sh --update`로 gateway.env를 생성한다. 프로필 env의 URL은 연결에 사용하지 않는다.
+- 메인이 자체 에이전트를 호출함: 갱신 후 기존 프로세스를 끝내고 `deepseek-main --resume`으로 재개한다. 일반 claude나 이전 런처는 제한을 적용하지 않는다. `deepseek-doctor`로 CLI 버전·옵션을 확인한다.
 - 401/403: 키와 서버 권한을 관리자에게 확인한다. 키를 채팅·로그·GitHub issue에 붙이지 않는다.
 - 모델/컨텍스트 오류: 실제 등록 ID와 요청당 한도를 사용한다. 공식 API의 별칭이나 1M 한도를 가정하지 않는다.
 - `/v1/messages`/SSE/tool_result 오류: Anthropic 호환 endpoint인지 확인한다. OpenAI 전용 URL은 지원하지 않는다.

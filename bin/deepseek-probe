@@ -20,6 +20,18 @@ def config(profile):
         if sep:
             tokens = shlex.split(text, comments=True)
             values[name.strip()] = tokens[0] if tokens else ''
+    gateway = root / 'gateway.env'
+    if not gateway.is_file():
+        raise ValueError('shared gateway missing; run install.sh --update')
+    for name in ('LLM_BASE_URL', 'LLM_AUTH_MODE', 'LLM_API_KEY'):
+        values.pop(name, None)
+    for line in gateway.read_text().splitlines():
+        name, sep, text = line.removeprefix('export ').partition('=')
+        if sep and name.strip() in ('LLM_BASE_URL', 'LLM_AUTH_MODE', 'LLM_API_KEY'):
+            tokens = shlex.split(text, comments=True)
+            values[name.strip()] = tokens[0] if tokens else ''
+    if values.get('LLM_AUTH_MODE') not in ('none', 'api_key'):
+        raise ValueError('invalid shared gateway authentication mode')
     for name in (('LLM_BASE_URL', 'LLM_MODEL') if values.get('LLM_AUTH_MODE') == 'none' else ('LLM_BASE_URL', 'LLM_API_KEY', 'LLM_MODEL')):
         if not values.get(name) or 'CHANGE_ME' in values[name]:
             raise ValueError('unconfigured lab backend: ' + name)

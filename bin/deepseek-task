@@ -160,9 +160,9 @@ def secrets_for(profile):
     values = [os.environ.get(k, "") for k in
               ("LLM_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")]
     conf = Path(os.environ.get("DEEPSEEK_WORKER_CONF_DIR", Path.home() / ".config/deepseek-worker"))
-    path = conf / ("env" + ("." + profile if profile else ""))
-    if path.is_file():
-        for line in path.read_text().splitlines():
+    paths = [conf / ("env" + ("." + profile if profile else "")), conf / "gateway.env"]
+    for path in paths:
+        for line in path.read_text().splitlines() if path.is_file() else []:
             if re.match(r"^(?:export\s+)?LLM_API_KEY=", line):
                 try:
                     values.extend(shlex.split(line.split("=", 1)[1], comments=True))

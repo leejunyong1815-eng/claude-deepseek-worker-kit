@@ -1,0 +1,189 @@
+{
+  "date": "2026-11-07",
+  "base_commit": "34dbd48b76abc2b0dc3324fba2ccb1352980046a",
+  "claude_cli": "2.1.314",
+  "isolation": {
+    "host_home_hidden": true,
+    "usr_read_only": true,
+    "fresh_home": true,
+    "implementation": "bubblewrap user/PID/IPC/UTS namespaces; read-only /usr; only private /work and temporary /tmp writable; live gateway network enabled"
+  },
+  "gateway": "http://1.233.219.161:4000",
+  "main": {
+    "default_model": "opus",
+    "authentication": "native Claude account in production; no host credentials copied into sandbox",
+    "inference": "mocked Anthropic responses through real Claude CLI; no paid Opus call",
+    "observations": [
+      {
+        "mode": "baseline",
+        "model": "claude-fable-5-1",
+        "native_tools": [
+          "Agent",
+          "Skill",
+          "Workflow"
+        ],
+        "current_policy": false
+      },
+      {
+        "mode": "resume",
+        "model": "claude-opus-5-5",
+        "native_tools": [],
+        "current_policy": true
+      },
+      {
+        "mode": "injection",
+        "model": "claude-opus-5-5",
+        "native_tools": [],
+        "current_policy": true
+      },
+      {
+        "mode": "injection",
+        "model": "claude-opus-5-5",
+        "native_tools": [],
+        "current_policy": true
+      },
+      {
+        "mode": "delegation",
+        "model": "claude-opus-5-5",
+        "native_tools": [],
+        "current_policy": true
+      },
+      {
+        "mode": "delegation",
+        "model": "claude-opus-5-5",
+        "native_tools": [],
+        "current_policy": true
+      },
+      {
+        "mode": "delegation",
+        "model": "claude-opus-5-5",
+        "native_tools": [],
+        "current_policy": true
+      },
+      {
+        "mode": "delegation",
+        "model": "claude-opus-5-5",
+        "native_tools": [],
+        "current_policy": true
+      },
+      {
+        "mode": "delegation",
+        "model": "claude-opus-5-5",
+        "native_tools": [],
+        "current_policy": true
+      }
+    ],
+    "forbidden_agent_injection": "real Claude CLI returned an error tool result; no native subagent session created"
+  },
+  "worker_routing": [
+    {
+      "model": "deepseek-v4.1-flash",
+      "base_url": "http://1.233.219.161:4000",
+      "main_guard_inherited": false
+    },
+    {
+      "model": "qwen3.8-flash-next",
+      "base_url": "http://1.233.219.161:4000",
+      "main_guard_inherited": false
+    }
+  ],
+  "tasks": [
+    {
+      "task_id": "t-76e6d20e1bfe4cd9a72c4a6dcaafdae4",
+      "role": "implementer",
+      "profile": "",
+      "state": "succeeded",
+      "worker_exit_code": 0,
+      "verification_exit_codes": [
+        0
+      ],
+      "permission_denial_count": 0,
+      "compute_result": null,
+      "actual_model_ids": [
+        "deepseek-v4.1-flash"
+      ],
+      "attempt_id": "0001"
+    },
+    {
+      "task_id": "t-6f419fb22d6d4b86b25f34c752a7fc7c",
+      "role": "compute-runner",
+      "profile": "qwen",
+      "state": "succeeded",
+      "worker_exit_code": 0,
+      "verification_exit_codes": [
+        0
+      ],
+      "permission_denial_count": 0,
+      "compute_result": {
+        "run_id": "c-55d97226c13c476f8e85fafbdfd920e4",
+        "state": "succeeded",
+        "transport": "local",
+        "ssh_host": null,
+        "spec_digest": "913191d209d2bcb3583a0841872a73fe38630054d41b5badc05de62fc681f354",
+        "started_at": 1793984309.784967,
+        "reason": null,
+        "command_exit_code": 0,
+        "verification_exit_codes": [
+          0
+        ],
+        "timed_out": false,
+        "wait_timed_out": false,
+        "verification_timed_out": false,
+        "selected_gpus": [],
+        "selected_gpu_uuids": [],
+        "resource": "cpu",
+        "cwd": "/work/home/.local/state/deepseek-worker/tasks/t-6f419fb22d6d4b86b25f34c752a7fc7c/attempts/0001/worktree",
+        "source_commit": "d4e3a723d6003610aaec580978d0f2df69d4d82a",
+        "source_dirty": false,
+        "source_pinned": false,
+        "stdout_path": "/work/home/.local/state/deepseek-worker/compute/c-55d97226c13c476f8e85fafbdfd920e4/stdout.log",
+        "stderr_path": "/work/home/.local/state/deepseek-worker/compute/c-55d97226c13c476f8e85fafbdfd920e4/stderr.log",
+        "verification_log": "/work/home/.local/state/deepseek-worker/compute/c-55d97226c13c476f8e85fafbdfd920e4/verification.log",
+        "remote_result_path": "/work/home/.local/state/deepseek-worker/compute/c-55d97226c13c476f8e85fafbdfd920e4/result.json",
+        "finished_at": 1793984309.8974607,
+        "duration_seconds": 0.10582756996154785,
+        "remote_cleanup_confirmed": true,
+        "transport_exit_code": 0
+      },
+      "actual_model_ids": [
+        "qwen3.8-flash-next"
+      ],
+      "attempt_id": "0001"
+    }
+  ],
+  "source_preserved": true,
+  "post_update_checks": {
+    "model_ids": [
+      "qwen3.8-flash-next",
+      "qwen3.8-flash-next-oai",
+      "deepseek-v4.1-flash",
+      "deepseek-v4.1-flash-oai"
+    ],
+    "limits": {
+      "qwen3.8-flash-next": 262144,
+      "qwen3.8-flash-next-oai": 262144,
+      "deepseek-v4.1-flash": 1048576,
+      "deepseek-v4.1-flash-oai": 1048576
+    },
+    "qwen_native_compute_log_reads": [
+      "result.json",
+      "stderr.log",
+      "stdout.log",
+      "verification.log"
+    ]
+  },
+  "offline_tests": {
+    "core": 98,
+    "demo": 8,
+    "total": 106,
+    "passed": true,
+    "command": "./tests/selftest.sh"
+  },
+  "limitations": [
+    "Opus inference and its spontaneous delegation choice were not tested; Anthropic responses were scripted. Real Claude CLI tool filtering, resume and Bash-to-managed-worker delegation were exercised.",
+    "DeepSeek and Qwen used the real lab gateway. Qwen operated a local CPU job. No remote SSH/GPU job or throughput benchmark was run.",
+    "Worktree separation and Claude tool permissions are not an OS security sandbox. The separate test harness provided OS isolation.",
+    "Environment and logs containing raw model reasoning or authentication values are not included."
+  ],
+  "passed": true
+}

@@ -11,7 +11,9 @@ deepseek-project-init .
 deepseek-main
 ```
 
-생성된 KICKOFF_PROMPT.md를 붙여 넣고 원하는 기능과 완료 조건을 말한다.
+메인은 기본 Opus로 Claude 계정을 사용하며 DeepSeek·Qwen은 공통 게이트웨이로 접속한다.
+원하는 기능과 완료 조건을 말하면 된다. KICKOFF_PROMPT.md에는 프로젝트별 시작 절차가 있다.
+런처가 자체 Agent·Workflow·Skill을 제외하고 관리 CLI 위임 지침을 넣는다.
 오케스트레이터가 조사·설계·테스트 초안·구현·독립 리뷰를 DeepSeek에 위임하고
 각 task/attempt ID, 외부 검증 결과, 남은 문제를 보고해야 한다.
 

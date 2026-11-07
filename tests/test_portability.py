@@ -14,7 +14,7 @@ from pathlib import Path
 if '--version' in sys.argv:
     print('2.1.314 (offline fixture)'); sys.exit(0)
 if '--help' in sys.argv:
-    print('--effort LEVEL --name NAME'); sys.exit(0)
+    print('--name NAME --disallowedTools TOOLS --system-prompt-snapshot MODE'); sys.exit(0)
 assert '--dangerously-skip-permissions' not in sys.argv
 assert os.environ['ANTHROPIC_MODEL'] == 'deepseek-v4.1-flash'
 assert 'CLAUDE_CODE_EFFORT_LEVEL' not in os.environ

@@ -3,7 +3,7 @@
 # 사용: deepseek-worker [-P 프로필] [claude 인자...]
 #   설정: ~/.config/deepseek-worker/env            (기본 프로필)
 #         ~/.config/deepseek-worker/env.<프로필>    (-P <프로필>, 예: -P review)
-#   install.sh 가 생성한다. 프로필마다 다른 서버·모델·워커 이름을 둘 수 있다.
+#   연결은 gateway.env 하나를 공유하고 프로필마다 모델·역할·워커 이름을 둔다.
 set -euo pipefail
 
 CONF_DIR="${DEEPSEEK_WORKER_CONF_DIR:-$HOME/.config/deepseek-worker}"
@@ -24,6 +24,12 @@ if [ ! -f "$ENV_FILE" ]; then
 fi
 # shellcheck disable=SC1090
 source "$ENV_FILE"
+# Profiles choose models/roles, never a second inference server or credentials.
+GATEWAY_FILE="$CONF_DIR/gateway.env"
+[ -f "$GATEWAY_FILE" ] || { echo 'deepseek-worker: shared gateway missing; run install.sh --update' >&2; exit 2; }
+unset LLM_BASE_URL LLM_AUTH_MODE LLM_API_KEY
+# shellcheck disable=SC1090
+source "$GATEWAY_FILE"
 
 : "${LLM_BASE_URL:?LLM_BASE_URL 이 비어 있습니다 ($ENV_FILE)}"
 case "${LLM_AUTH_MODE:-api_key}" in
@@ -83,6 +89,9 @@ exec env \
   -u CLAUDE_CODE_USE_VERTEX \
   -u CLAUDE_CODE_USE_FOUNDRY \
   -u MAX_THINKING_TOKENS \
+  -u CLAUDE_CODE_DISABLE_EXPLORE_PLAN_AGENTS \
+  -u CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS \
+  -u DEEPSEEK_MAIN_MANAGED_DELEGATION \
   -u CLAUDE_CODE_EFFORT_LEVEL \
   -u DEEPSEEK_WORKER_EFFORT \
   -u LLM_EFFORT \

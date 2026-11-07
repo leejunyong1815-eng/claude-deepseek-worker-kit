@@ -11,7 +11,7 @@ import stat
 import subprocess
 import sys
 
-MIN_CLAUDE = (2, 1, 224)
+MIN_CLAUDE = (2, 1, 257)
 
 
 def main():
@@ -40,9 +40,9 @@ def main():
             match = re.search(r'(\d+)\.(\d+)\.(\d+)', version.stdout)
             valid = version.returncode == 0 and match and tuple(map(int, match.groups())) >= MIN_CLAUDE
             # Never dump CLI stderr or arbitrary output: it may contain local credentials.
-            check('Claude version', bool(valid), match.group(0) if match else 'unreadable (requires >=2.1.224)')
+            check('Claude version', bool(valid), match.group(0) if match else 'unreadable (requires >=2.1.257)')
             help_result = subprocess.run([claude, '--help'], env=env, capture_output=True, text=True, timeout=15)
-            for flag in ('--name',):
+            for flag in ('--name', '--disallowedTools', '--system-prompt-snapshot'):
                 supported = help_result.returncode == 0 and re.search(re.escape(flag) + r'(?:[\s=,]|$)', help_result.stdout)
                 check('Claude ' + flag, bool(supported), 'available' if supported else 'missing; update Claude Code')
         except (OSError, subprocess.TimeoutExpired):
@@ -56,6 +56,19 @@ def main():
                 if sep and name.strip().startswith('LLM_'):
                     parts = shlex.split(raw, comments=True)
                     values[name.strip()] = parts[0] if len(parts) == 1 else ''
+            gateway = conf / 'gateway.env'
+            check('shared gateway', gateway.is_file(), 'present (connection values hidden)' if gateway.is_file()
+                  else 'missing; run install.sh --update')
+            for name in ('LLM_BASE_URL', 'LLM_AUTH_MODE', 'LLM_API_KEY'):
+                values.pop(name, None)
+            if gateway.is_file():
+                for line in gateway.read_text().splitlines():
+                    name, sep, raw = line.removeprefix('export ').partition('=')
+                    if sep and name in ('LLM_BASE_URL', 'LLM_AUTH_MODE', 'LLM_API_KEY'):
+                        parts = shlex.split(raw, comments=True)
+                        values[name] = parts[0] if len(parts) == 1 else ''
+                check('gateway permissions', stat.S_IMODE(gateway.stat().st_mode) == 0o600, 'expected 0600')
+                check('gateway authentication', values.get('LLM_AUTH_MODE') in ('none', 'api_key'), 'requires none or api_key')
             names = ('LLM_BASE_URL', 'LLM_MODEL', 'LLM_CONTEXT_WINDOW') + (() if values.get('LLM_AUTH_MODE') == 'none' else ('LLM_API_KEY',))
             missing = [n for n in names if not values.get(n) or 'CHANGE_ME' in values[n]]
             check('backend config', not missing, 'present (values hidden)' if not missing else 'missing fields: ' + ', '.join(missing))

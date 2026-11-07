@@ -5,11 +5,13 @@
 
 | 역할 | Anthropic 모델 ID | OpenAI 호환 모델 ID | 프록시 max_input_tokens |
 |---|---|---|---|
-| 일반 위임 | deepseek-v4.1-flash | deepseek-v4.1-flash-oai | 262144 |
+| 일반 위임 | deepseek-v4.1-flash | deepseek-v4.1-flash-oai | 1048576 |
 | Compute Job 운영 | qwen3.8-flash-next | qwen3.8-flash-next-oai | 262144 |
 
-컨텍스트는 프록시 메타데이터 값이며 256K 입력을 실제로 채워 품질을 검증한 결과는 아니다.
-출력 예산을 합쳐 무제한으로 사용할 수 있다는 뜻도 아니다. 이전 서버의 1M 설정은 승계하지 않는다.
+2026-11-07에 모델 목록과 /model/info를 다시 조회했다. 위 값은 프록시 메타데이터이며
+해당 길이의 입력을 실제로 채워 품질을 검증한 결과는 아니다. 클라이언트 예산은 두 모델 모두 262144로 유지한다.
+출력 예산을 합쳐 무제한으로 사용할 수 있다는 뜻도 아니다. 이 게이트웨이에는 현재 Opus·Fable이 등록되어 있지 않다.
+Opus 메인은 Claude 계정으로 실행하고 DeepSeek·Qwen만 공통 gateway.env를 사용한다.
 
 실제 모델에 도구 호출과 tool-result 연속 요청, SSE 종료, thinking/effort 요청,
 Responses 텍스트 요청을 보냈다. 키·thinking 원문 없이 [API 검사](validation/litellm-compatibility.json),
@@ -29,6 +31,20 @@ python3 -B bench/litellm_check.py --base-url http://1.233.219.161:4000 --output 
 
 이 명령은 실제 모델 요청을 보낸다. 인증이 필요하면 LLM_API_KEY를 환경변수로 제공한다.
 기존 env의 마이그레이션은 README/UPDATING.md를 따른다.
+
+## 메인 위임과 공통 게이트웨이 검사 (2026-11-07)
+
+호스트 홈을 숨긴 bubblewrap 환경에서 새 HOME으로 설치하고 실제 Claude CLI 2.1.314를 실행했다.
+기존 Fable 세션에서는 Agent·Workflow·Skill이 노출됐고, deepseek-main으로 Opus resume한 뒤에는
+해당 도구가 요청 목록에서 제외됐다. 모의 서버가 Agent 호출을 반환해도 CLI가 거절하고 하위 세션을 만들지 않았다.
+
+Opus 응답만 모의 서버로 제공하고, 실제 CLI의 Bash → submit/run 경로로 DeepSeek 구현과
+Qwen CPU 잡 운영을 실행했다. 두 태스크 모두 권한 거절 없이 독립 검증을 통과했다.
+오래된 프로필 URL을 넣어도 실제 워커 연결은 공통 게이트웨이를 사용했다. Qwen의 native Read로
+해당 CPU 잡의 stdout·stderr·검증 로그를 읽은 것도 확인했다. 원본 프로젝트는 clean 상태를 유지했다.
+
+[검사 기록](validation/orchestrator-routing.json)에 모델 ID, 태스크 결과와 106개 오프라인 테스트 결과를 남겼다.
+실제 유료 Opus 추론이나 자발적 위임 선택, 원격 GPU 실행을 검증한 결과는 아니다.
 
 ## 워커 effort 생략
 
