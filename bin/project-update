@@ -74,7 +74,8 @@ def safe_target(project, relative):
 
 def historical_hashes(kit, relative):
     path = "templates/project/" + relative.as_posix()
-    commits = git(kit, "log", "--format=%H", "HEAD", "--", path)
+    # A tree-preserving merge can hide the imported kit from simplified path history.
+    commits = git(kit, "log", "--full-history", "--format=%H", "HEAD", "--", path)
     hashes = set()
     for commit in (commits or b"").decode().splitlines():
         data = git(kit, "show", commit + ":" + path)

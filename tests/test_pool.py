@@ -165,6 +165,18 @@ class Pools(unittest.TestCase):
             changed['owner_uid'] = os.getuid()
             (first / 'pool.json').write_text(json.dumps(changed))
 
+    def test_explicit_profile_model_takes_precedence_over_automatic_role_routing(self):
+        self.add('one', 'general-model')
+        self.call(KIT / 'bin/llm-backend', 'model-add', 'one', 'profile-model')
+        conf = self.root / 'conf'
+        (conf / 'env.impl').write_text((conf / 'env').read_text().replace('mock-default', 'profile-model'))
+        with patch.dict(os.environ, self.env, clear=True):
+            folder, data = create(self.repo, 'codex', '1', ['one'], [], ['impl'], [], 'profile')
+        self.pool_dirs.append(folder)
+        self.serve(folder, data['workers'][0])
+        task, env = self.submit(folder)
+        self.assertEqual(self.result(task, env)['model'], 'profile-model')
+
     def test_default_backend_selection_and_unknown_model_fail_closed(self):
         self.add('one', 'model-one')
         self.call(KIT / 'bin/llm-backend', 'default', 'one')

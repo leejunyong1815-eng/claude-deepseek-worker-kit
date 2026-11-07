@@ -89,10 +89,10 @@ def choose(profile='', backend=None, model=None, role=None):
     data = load(selected, profile)
     if model:
         candidates = [m for m in data['models'] if m['id'] == model]
-    elif role:
-        candidates = sorted((m for m in data['models'] if role in m['roles']), key=lambda m: len(m['roles']))
     elif profile and settings.get('LLM_MODEL'):
         candidates = [m for m in data['models'] if m['id'] == settings['LLM_MODEL']]
+    elif role:
+        candidates = sorted((m for m in data['models'] if role in m['roles']), key=lambda m: len(m['roles']))
     else:
         candidates = data['models'][:1]
     if not candidates:

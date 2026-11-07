@@ -4,9 +4,9 @@
   "deepseek_base": "37905806e407fd85d6a3fad288f609c80454bd54",
   "offline_tests": {
     "command": "./tests/selftest.sh",
-    "core": 119,
+    "core": 121,
     "demo": 8,
-    "total": 127,
+    "total": 129,
     "passed": true
   },
   "isolated_ui": {
@@ -137,5 +137,14 @@
     "Real DeepSeek and Qwen calls used the existing lab gateway. The Qwen job used local CPU; no actual remote SSH/GPU job was run.",
     "No token-saving percentage, throughput improvement or relative model quality was measured. Idle workers do not call a model and wait blocks without repeated model turns.",
     "The OS test hid host home and mounted /usr read-only; networking was shared. Product worktrees and tool permissions themselves are not a security sandbox."
-  ]
+  ],
+  "merged_template_history_check": {
+    "passed": true,
+    "previous_deepseek_templates": {
+      "update": 7,
+      "current": 10
+    },
+    "regression": "full-history traversal recognizes a template from the other parent of an ours merge"
+  },
+  "explicit_profile_routing_check": "profile model remains fixed before automatic role selection"
 }

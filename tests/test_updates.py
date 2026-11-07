@@ -94,6 +94,24 @@ class ProjectUpdateTests(unittest.TestCase):
         self.assertEqual((Path(report["backup_dir"]) / "incoming/AGENTS.md").read_text(), "rules v2\n")
         self.assertEqual((self.project / "agents/ROLE.md").read_text(), "role v2\n")
 
+    def test_template_from_other_merge_parent_is_recognized(self):
+        self.git(self.kit, "add", "templates")
+        self.commit(self.kit)
+        branch = self.git(self.kit, "branch", "--show-current").decode().strip()
+        self.git(self.kit, "checkout", "-qb", "other-kit")
+        (self.source / "AGENTS.md").write_text("other kit rules\n")
+        self.git(self.kit, "add", "templates")
+        self.commit(self.kit)
+        self.git(self.kit, "checkout", "-q", branch)
+        self.git(self.kit, "-c", "user.name=Update tests", "-c", "user.email=tests@local",
+                 "merge", "--no-ff", "-s", "ours", "-m", "join kit histories", "other-kit")
+        (self.project / "AGENTS.md").write_text("other kit rules\n")
+        report = self.call("--check")
+        entry = next(item for item in report["files"] if item["path"] == "AGENTS.md")
+        self.assertEqual(entry["status"], "update")
+        self.call("--apply")
+        self.assertEqual((self.project / "AGENTS.md").read_text(), "rules v2\n")
+
     def test_missing_history_proposes_instead_of_overwriting(self):
         archive = self.root / "archive"
         shutil.copytree(self.kit, archive, ignore=shutil.ignore_patterns(".git"))
