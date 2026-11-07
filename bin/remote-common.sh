@@ -1,5 +1,6 @@
 # remote-common.sh — remote-* 스크립트 공용. 직접 실행하지 않는다.
-CONF="${CLAUDE_WORKER_CONF_DIR:-$HOME/.config/claude-worker}/env"
+source "$(dirname "$(readlink -f "$0")")/_kit_env.sh"
+CONF="$LLM_WORKER_CONF_DIR/env"
 # shellcheck disable=SC1090
 [ -f "$CONF" ] && source "$CONF"
 COMPUTE_HOST="${COMPUTE_HOST:-}"

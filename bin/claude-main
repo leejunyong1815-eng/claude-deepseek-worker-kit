@@ -1,9 +1,55 @@
 #!/usr/bin/env bash
-# claude-main — 오케스트레이터 세션(진짜 Claude). 로컬 LLM 쪽 환경변수를 모두 지우고 실행한다.
+# Opus orchestrator on the user's Claude account; managed workers use the lab gateway.
 set -euo pipefail
+source "$(dirname "$(readlink -f "$0")")/_kit_env.sh"
 
+CONF_DIR="${LLM_WORKER_CONF_DIR:-$HOME/.config/local-worker}"
+KIT="${LLM_WORKER_KIT:-}"
+if [ -z "$KIT" ] && [ -f "$CONF_DIR/kit_dir" ]; then KIT="$(cat "$CONF_DIR/kit_dir")"; fi
+if [ -z "$KIT" ]; then KIT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"; fi
+POLICY="$KIT/prompts/orchestrator.md"
+[ -f "$POLICY" ] || { echo 'claude-main: orchestrator prompt missing; run install.sh --update' >&2; exit 2; }
+
+# Bare deny names remove these tools from the model's tool pool. Skill is included
+# because context:fork skills can create native subagents without an explicit Agent call.
+MODEL="${ORCHESTRATOR_MODEL:-opus}"
 NAME="${ORCHESTRATOR_NAME:-orchestrator}"
-
+DENIED=(Agent Task Workflow TeamCreate Skill "Bash(claude)" "Bash(claude *)")
+ARGS=()
+EXTRA_PROMPT=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --model)
+            [ $# -ge 2 ] || { echo 'missing model value' >&2; exit 2; }
+            MODEL="$2"; shift 2 ;;
+        --model=*) MODEL="${1#*=}"; shift ;;
+        --name|-n)
+            [ $# -ge 2 ] || { echo 'missing name value' >&2; exit 2; }
+            NAME="$2"; shift 2 ;;
+        --name=*) NAME="${1#*=}"; shift ;;
+        --append-system-prompt)
+            [ $# -ge 2 ] || { echo 'missing append-system-prompt value' >&2; exit 2; }
+            EXTRA_PROMPT+=$'\n'; EXTRA_PROMPT+="$2"; shift 2 ;;
+        --append-system-prompt=*) EXTRA_PROMPT+=$'\n'; EXTRA_PROMPT+="${1#*=}"; shift ;;
+        --disallowedTools|--disallowed-tools)
+            shift
+            [ $# -gt 0 ] && [[ "$1" != -* ]] || { echo 'missing disallowed tool rule' >&2; exit 2; }
+            while [ $# -gt 0 ] && [[ "$1" != -* ]]; do DENIED+=("$1"); shift; done ;;
+        --disallowedTools=*|--disallowed-tools=*) DENIED+=("${1#*=}"); shift ;;
+        --system-prompt-snapshot|--system-prompt-snapshot=*|--append-system-prompt-file|--append-system-prompt-file=*)
+            echo 'claude-main: the launcher owns prompt freshness; use --append-system-prompt for additional context' >&2; exit 2 ;;
+        --) ARGS+=("$@"); break ;;
+        *) ARGS+=("$1"); shift ;;
+    esac
+done
+PROMPT="$(cat "$POLICY")$EXTRA_PROMPT"
+if [ -n "${LLM_POOL_DIR:-}" ]; then
+    POOL_CONTEXT="$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1])),ensure_ascii=False))' "$LLM_POOL_DIR/pool.json")"
+    PROMPT+=$'\nOwned worker pool: '; PROMPT+="$POOL_CONTEXT"
+    PROMPT+=$'\nSubmit tasks with worker-task submit. The owned pool claims queued tasks; do not call worker-task run. Choose model/worker only when needed; otherwise registered role routing and queue load choose them. Use worker-task wait <id> to block without repeated model polling. Labels are display text; only pool/worker IDs prove ownership.'
+fi
+# Make installed management commands available even when invoked by absolute path.
+export PATH="${LLM_POOL_DIR:+$LLM_POOL_DIR:}$(dirname "$(readlink -f "$0")"):$PATH"
 exec env \
   -u ANTHROPIC_API_KEY \
   -u ANTHROPIC_AUTH_TOKEN \
@@ -12,10 +58,39 @@ exec env \
   -u ANTHROPIC_DEFAULT_OPUS_MODEL \
   -u ANTHROPIC_DEFAULT_SONNET_MODEL \
   -u ANTHROPIC_DEFAULT_HAIKU_MODEL \
+  -u ANTHROPIC_DEFAULT_FABLE_MODEL \
+  -u ANTHROPIC_SMALL_FAST_MODEL \
+  -u ANTHROPIC_DEFAULT_OPUS_MODEL_NAME \
+  -u ANTHROPIC_DEFAULT_OPUS_MODEL_SUPPORTED_CAPABILITIES \
+  -u ANTHROPIC_DEFAULT_SONNET_MODEL_SUPPORTED_CAPABILITIES \
+  -u ANTHROPIC_DEFAULT_HAIKU_MODEL_SUPPORTED_CAPABILITIES \
+  -u ANTHROPIC_DEFAULT_FABLE_MODEL_SUPPORTED_CAPABILITIES \
+  -u CLAUDE_CODE_EFFORT_LEVEL \
+  -u CLAUDE_CODE_MAX_CONTEXT_TOKENS \
+  -u CLAUDE_CODE_AUTO_COMPACT_WINDOW \
+  -u CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS \
+  -u DISABLE_PROMPT_CACHING \
+  -u MAX_THINKING_TOKENS \
   -u CLAUDE_CODE_SUBAGENT_MODEL \
+  -u CLAUDE_CODE_SUBAGENT_MODEL_FORCE \
+  -u CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL \
+  -u CLAUDE_CODE_MAX_OUTPUT_TOKENS \
   -u CLAUDE_CODE_USE_BEDROCK \
   -u CLAUDE_CODE_USE_VERTEX \
   -u CLAUDE_CODE_USE_FOUNDRY \
+  -u LLM_API_KEY \
+  -u LLM_AUTH_MODE \
+  -u LLM_BASE_URL \
+  -u LLM_MODEL \
+  -u LLM_CONTEXT_WINDOW \
+  -u LLM_EFFORT \
+  CLAUDE_CODE_DISABLE_EXPLORE_PLAN_AGENTS=1 \
+  CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS=1 \
+  LLM_MAIN_MANAGED_DELEGATION=1 \
   claude \
     --name "$NAME" \
-    "$@"
+    --model "$MODEL" \
+    --disallowedTools "${DENIED[@]}" \
+    --system-prompt-snapshot off \
+    --append-system-prompt "$PROMPT" \
+    "${ARGS[@]}"

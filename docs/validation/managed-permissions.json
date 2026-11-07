@@ -1,0 +1,56 @@
+{
+  "task_id": "t-35317c4c7cbf4be3ad81e291f90126df",
+  "attempt_id": "0001",
+  "state": "succeeded",
+  "reason": null,
+  "permission_profile": "workspace",
+  "permission_denial_count": 0,
+  "worker_exit_code": 0,
+  "verification_exit_codes": [
+    0,
+    0
+  ],
+  "verification_valid": true,
+  "changed_files": [
+    {
+      "path": "candidate-tests/test_check.py",
+      "change": "added"
+    },
+    {
+      "path": "gre/__init__.py",
+      "change": "added"
+    },
+    {
+      "path": "gre/check.py",
+      "change": "added"
+    },
+    {
+      "path": "reports/result.json",
+      "change": "added"
+    }
+  ],
+  "runner_exit_code": 0,
+  "original_input_unchanged": true,
+  "original_checkout_clean": true,
+  "model_ids": [
+    "DeepSeek-V4.1-Flash"
+  ],
+  "observed_tool_calls": {
+    "Read": 4,
+    "Bash": 11,
+    "Write": 8
+  },
+  "num_turns": 14,
+  "duration_ms": 5389,
+  "fixture": "temporary Git checkout plus external synthetic input; no research datasets",
+  "local_artifact_directory": "/tmp/deepseek-managed-permission-live-jm7p57ha",
+  "verification_commands": "independent SHA256/input-result check and stdlib candidate unittest",
+  "bootstrap_implementation": {
+    "task_id": "t-600ac997d72a4f788aab7bebad1c9003",
+    "worker_exit_code": 1,
+    "reason": "turn limit reached; partial module reviewed, corrected and tested by main; not counted as a successful task"
+  },
+  "external_input_metadata_precedes_worker": true,
+  "source_head_preserved": true,
+  "source_branch_preserved": true
+}

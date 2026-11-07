@@ -1,19 +1,8 @@
-# IMPLEMENTER — 역할 프롬프트
+# Implementer discipline
+Implement the complete assigned module or coherent set of files. A skeleton is
+optional. Choose internal design within the approved contract. Inspect related
+imports and tests, then implement and iterate using actual failures. Do not
+modify protected tests/configuration. Leave changes uncommitted for review.
 
-역할: 태스크 파일이 지정한 스켈레톤(함수·클래스 본문)을 채우거나 작은 버그를 고쳐 **지정된 테스트를 통과**시킨다.
-설계는 이미 끝나 있다. 네 일은 채우기·실행·고치기다.
-
-절차
-1. 태스크 파일의 **읽을 파일 목록**만 읽는다. 레포를 돌아다니며 탐색하지 않는다.
-2. 실행기가 지정한 worktree의 현재 디렉터리에서 작업한다. 수동 모드도 오케스트레이터가 준비한 별도 작업 공간에서만 시작한다. 임의 checkout·worktree 생성·원본 체크아웃 편집을 하지 않는다.
-3. 먼저 테스트를 돌려 현재 실패 목록을 확인한다 (태스크 파일의 실행 명령).
-4. 파일 전체를 한 번 쓴 뒤 테스트를 돌린다. 파일을 고칠 때마다 훅이 문법·lint 를 검사해 오류를 돌려준다. 테스트 실패는 한 번에 하나씩 고치고 다시 돌린다.
-5. 수정본을 작업 공간에 남긴다. 자동 add·commit·merge·삭제하지 않는다. 실패·취소된 시도도 보존한다.
-6. HANDOFF_TEMPLATE.md 형식으로 변경 파일·실행 명령·실제 종료 코드를 보고한다. 관리 모드의 최종 성공은 실행기의 외부 검증 기록으로 결정하며 워커 보고만으로 인정하지 않는다.
-
-규칙
-- 테스트 파일은 고치지 않는다. 테스트가 틀렸다고 생각되면 고치지 말고 보고에 적는다. 테스트를 약화하거나 지우는 것은 실패로 간주된다.
-- 함수 시그니처·타입·공개 이름을 바꾸지 않는다. 태스크 파일에 없는 파일은 만들거나 고치지 않는다.
-- 라이브러리 API 는 설치된 버전에서 확인한다 (`python3 -c 'import x; help(x.f)'`). 추측으로 코드를 쓰지 않는다.
-- 실행 시간이 긴 코드는 규모를 줄이는 인자를 두고, 중간 결과를 즉시 저장한다.
-- 같은 실패를 세 번 고치지 못하면 멈추고, 무엇을 시도했고 어디서 막혔는지 보고한다. 우회하지 않는다.
+Stay in the assigned worktree and follow the immutable task contract.
+Use HANDOFF_TEMPLATE.md; your report is not the final success decision.

@@ -1,0 +1,116 @@
+{
+  "base_url": "http://1.233.219.161:4000",
+  "inference": "real lab models via Claude Code",
+  "compute": "real local CPU job; no real remote SSH or GPU used",
+  "source_checkout_preserved": true,
+  "tasks": [
+    {
+      "task_id": "t-a913e38daeb94ca1b388cd12b41387ff",
+      "attempt_id": "0001",
+      "state": "succeeded",
+      "reason": null,
+      "profile": "",
+      "role": "implementer",
+      "base_commit": "17987656fb7e86b2ebeaefd7d171c2f250a8a8b3",
+      "worker_exit_code": 0,
+      "verification_exit_codes": [
+        0
+      ],
+      "permission_denial_count": 0,
+      "worker_timed_out": false,
+      "duration_seconds": 23.09617519378662,
+      "changed_files": [
+        {
+          "path": "src/calc.py",
+          "change": "modified"
+        }
+      ],
+      "cli_exit_code": 0,
+      "model_usage": {
+        "deepseek-v4.1-flash": {
+          "inputTokens": 19771,
+          "outputTokens": 924,
+          "cacheReadInputTokens": 99499,
+          "cacheCreationInputTokens": 0,
+          "contextWindow": 262144
+        }
+      },
+      "artifact_root": "/tmp/lab-managed-live-bcho6b7s/tasks/t-a913e38daeb94ca1b388cd12b41387ff/attempts/0001"
+    },
+    {
+      "task_id": "t-847c1f9cf4d9494dbdea93fdda4a8618",
+      "attempt_id": "0001",
+      "state": "succeeded",
+      "reason": null,
+      "profile": "qwen",
+      "role": "compute-runner",
+      "base_commit": "17987656fb7e86b2ebeaefd7d171c2f250a8a8b3",
+      "worker_exit_code": 0,
+      "verification_exit_codes": [
+        0
+      ],
+      "permission_denial_count": 0,
+      "worker_timed_out": false,
+      "duration_seconds": 96.19231653213501,
+      "changed_files": [
+        {
+          "path": "reports/cpu-result.json",
+          "change": "added"
+        },
+        {
+          "path": "reports/operator.md",
+          "change": "added"
+        }
+      ],
+      "cli_exit_code": 0,
+      "model_usage": {
+        "qwen3.8-flash-next": {
+          "inputTokens": 5832,
+          "outputTokens": 3714,
+          "cacheReadInputTokens": 84864,
+          "cacheCreationInputTokens": 23296,
+          "contextWindow": 262144
+        }
+      },
+      "artifact_root": "/tmp/lab-managed-live-bcho6b7s/tasks/t-847c1f9cf4d9494dbdea93fdda4a8618/attempts/0001",
+      "compute_result": {
+        "run_id": "c-244e81f4195645dc86244ec1ae4b3a60",
+        "state": "succeeded",
+        "transport": "local",
+        "ssh_host": null,
+        "spec_digest": "56e7f05d15d4aa8d5ac8e8efb11890ded1ec49757b50b0a96743dadfd5c479d9",
+        "started_at": 1793809245.0965881,
+        "reason": null,
+        "command_exit_code": 0,
+        "verification_exit_codes": [
+          0
+        ],
+        "timed_out": false,
+        "wait_timed_out": false,
+        "verification_timed_out": false,
+        "selected_gpus": [],
+        "selected_gpu_uuids": [],
+        "resource": "cpu",
+        "cwd": "/tmp/lab-managed-live-bcho6b7s/tasks/t-847c1f9cf4d9494dbdea93fdda4a8618/attempts/0001/worktree",
+        "source_commit": "17987656fb7e86b2ebeaefd7d171c2f250a8a8b3",
+        "source_dirty": false,
+        "source_pinned": false,
+        "stdout_path": "/tmp/lab-managed-live-bcho6b7s/runtime/deepseek-worker/compute/c-244e81f4195645dc86244ec1ae4b3a60/stdout.log",
+        "stderr_path": "/tmp/lab-managed-live-bcho6b7s/runtime/deepseek-worker/compute/c-244e81f4195645dc86244ec1ae4b3a60/stderr.log",
+        "verification_log": "/tmp/lab-managed-live-bcho6b7s/runtime/deepseek-worker/compute/c-244e81f4195645dc86244ec1ae4b3a60/verification.log",
+        "remote_result_path": "/tmp/lab-managed-live-bcho6b7s/runtime/deepseek-worker/compute/c-244e81f4195645dc86244ec1ae4b3a60/result.json",
+        "finished_at": 1793809245.2086623,
+        "duration_seconds": 0.10550212860107422,
+        "remote_cleanup_confirmed": true,
+        "transport_exit_code": 0
+      }
+    }
+  ],
+  "checked_at": "2026-11-04T16:24:21.887159+00:00",
+  "offline_tests": {
+    "core": 86,
+    "demo": 8,
+    "total": 94,
+    "passed": true
+  }
+}

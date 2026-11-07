@@ -1,0 +1,83 @@
+{
+  "claude_cli": "2.1.314",
+  "isolation": {
+    "host_home_hidden": true,
+    "read_only_usr": true,
+    "network": "shared network; test API uses loopback only; all SSH/transfer commands are local shims",
+    "ssh": "local command shims; no SSH server or remote host contacted",
+    "model": "scripted Anthropic API responses; no live or paid model calls"
+  },
+  "cases": [
+    {
+      "task_id": "t-64c96c7c5bea40f5a09eeebed773dcac",
+      "attempt_id": "0001",
+      "state": "succeeded",
+      "reason": null,
+      "permission_profile": "workspace",
+      "permission_denial_count": 0,
+      "worker_exit_code": 0,
+      "verification_exit_codes": [
+        0
+      ],
+      "verification_valid": true,
+      "case": "workspace",
+      "executed_tools": [
+        "scp",
+        "ssh",
+        "rsync",
+        "sftp"
+      ]
+    },
+    {
+      "task_id": "t-e91ed9a897f4403d9750fcd3bb27caaf",
+      "attempt_id": "0001",
+      "state": "succeeded",
+      "reason": null,
+      "permission_profile": "custom",
+      "permission_denial_count": 0,
+      "worker_exit_code": 0,
+      "verification_exit_codes": [
+        0
+      ],
+      "verification_valid": true,
+      "case": "custom",
+      "executed_tools": [
+        "scp",
+        "ssh",
+        "rsync",
+        "sftp"
+      ]
+    },
+    {
+      "task_id": "t-94da837b27834009bd4c56ef4af86a69",
+      "attempt_id": "0001",
+      "state": "failed",
+      "reason": "permission_denied",
+      "permission_profile": "workspace",
+      "permission_denial_count": 1,
+      "worker_exit_code": 0,
+      "verification_exit_codes": [],
+      "verification_valid": false,
+      "case": "deny",
+      "executed_tools": []
+    }
+  ],
+  "original_preserved": true,
+  "passed": true,
+  "date": "2026-11-07",
+  "base_commit": "670c1d0426c657d524dce7d881981ded25043573",
+  "offline_tests": {
+    "command": "./tests/selftest.sh",
+    "core": 102,
+    "demo": 8,
+    "total": 110,
+    "passed": true
+  },
+  "limitations": [
+    "SSH and transfer commands were local shims; no actual remote host login or GPU scheduling was tested.",
+    "Anthropic API responses were scripted; no real DeepSeek, Qwen or paid Claude inference was requested.",
+    "Direct SSH jobs are not enrolled in the managed compute executor lifecycle. Local worktree verification alone does not attest to remote changes.",
+    "The first harness run had a malformed fixture command; it failed independent verification and was preserved. A corrected harness ran in a fresh workspace.",
+    "This host did not allow loopback setup in a private network namespace. Filesystem/PID isolation was retained with shared networking; only a loopback mock API was contacted."
+  ]
+}

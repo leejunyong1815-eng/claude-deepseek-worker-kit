@@ -1,0 +1,41 @@
+{
+  "purpose": "Run and report a local CPU job with Qwen",
+  "repository": ".",
+  "base_commit": "HEAD",
+  "role": "compute-runner",
+  "profile": "qwen",
+  "instructions": "The trusted compute executor has already run the job. Read reports/cpu-result.json and the supplied compute result. Write reports/compute-summary.md with the actual run ID, CPU resource, sum=55, exit/verification codes, and log paths. Do not run or retry the job. Then finish.",
+  "references": [],
+  "allowed_paths": [
+    "reports/"
+  ],
+  "protected_paths": [],
+  "compute_job": {
+    "resource": "cpu",
+    "transport": "local",
+    "cwd": "@worktree",
+    "command": [
+      "python3",
+      "-B",
+      "-c",
+      "import json;from pathlib import Path;p=Path('reports');p.mkdir(exist_ok=True);(p/'cpu-result.json').write_text(json.dumps({'sum':sum(range(11)),'resource':'cpu'}));print('CPU_JOB_OK')"
+    ],
+    "verify": [
+      [
+        "python3",
+        "-B",
+        "-c",
+        "import json;from pathlib import Path;assert json.loads(Path('reports/cpu-result.json').read_text()) == {'sum':55,'resource':'cpu'}"
+      ]
+    ],
+    "wait_timeout": 30,
+    "timeout": 60,
+    "verify_timeout": 30
+  },
+  "verify": [
+    "python3 -B -c \"import json;from pathlib import Path;assert json.loads(Path('reports/cpu-result.json').read_text())['sum']==55;assert Path('reports/compute-summary.md').stat().st_size>30\""
+  ],
+  "timeout": 180,
+  "max_turns": 60,
+  "verify_timeout": 30
+}

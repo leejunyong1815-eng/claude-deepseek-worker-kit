@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(dirname "$(readlink -f "$0")")/_kit_env.sh"
+exec python3 "$(dirname "$(readlink -f "$0")")/_duo.py" codex "$@"

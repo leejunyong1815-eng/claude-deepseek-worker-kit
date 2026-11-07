@@ -18,14 +18,51 @@ if '--version' in sys.argv:
     print('2.1.312 (mock)'); sys.exit(0)
 assert '--dangerously-skip-permissions' not in sys.argv
 assert '--permission-mode' not in sys.argv
+if os.environ.get('LLM_WORKER_SETTINGS'):
+    from pathlib import Path
+    settings_path=Path(os.environ['LLM_WORKER_SETTINGS'])
+    assert settings_path.is_file() and settings_path.parent != Path.cwd()
+    assert sys.argv.count('--settings') == 1
+    assert sys.argv[sys.argv.index('--settings')+1] == str(settings_path)
+    settings=json.loads(settings_path.read_text())
+    assert settings['permissions']['defaultMode'] == 'dontAsk'
+    assert sys.argv[sys.argv.index('--tools')+1] == 'default'
+
 assert not os.environ.get('CLAUDECODE')
 assert not os.environ.get('CLAUDE_CODE_SESSION_ID')
 assert not os.environ.get('CLAUDE_CODE_CHILD_SESSION')
 assert os.environ['ANTHROPIC_MODEL'] == 'mock-model'
+assert '--effort' not in sys.argv
+for key in ('CLAUDE_CODE_EFFORT_LEVEL','LLM_WORKER_EFFORT','LLM_EFFORT'):
+    assert key not in os.environ
+assert 1 <= int(sys.argv[sys.argv.index('--max-turns') + 1]) <= 1000
+assert os.environ['LLM_WORKER_ROLE'] in sys.argv[sys.argv.index('-p') + 1]
+for tier in ('OPUS', 'SONNET', 'HAIKU', 'FABLE'):
+    assert os.environ['ANTHROPIC_DEFAULT_' + tier + '_MODEL'] == 'mock-model'
+assert os.environ['CLAUDE_CODE_SUBAGENT_MODEL'] == 'mock-model'
+assert not os.environ.get('MAX_THINKING_TOKENS')
 prompt = sys.argv[sys.argv.index('-p') + 1]
 args = json.loads(prompt.rsplit('\n\n', 1)[1])
 mode = args.get('mode', 'edit')
-Path('src/value.txt').write_text(args.get('value', 'worker'))
+if mode == 'budget':
+    Path('src/budget.txt').write_text(sys.argv[sys.argv.index('--max-turns')+1])
+if mode == 'turn_limit':
+    print(json.dumps({'is_error':True,'subtype':'error_max_turns'}));sys.exit(1)
+if mode == 'new_module':
+    Path('src/generated.py').write_text('def twice(value):\n    return value * 2\n')
+elif mode != 'candidate':
+    Path('src/value.txt').write_text(args.get('value', 'worker'))
+if mode == 'candidate':
+    Path('candidate-tests').mkdir()
+    Path('candidate-tests/test_candidate.py').write_text('assert 2 + 2 == 4\n')
+if mode == 'symlink_output':
+    Path('src/link.txt').symlink_to('value.txt')
+if mode == 'input_edit':
+    next(Path('.task-inputs').rglob('value.txt')).write_text('tampered')
+if mode == 'consume':
+    data = next(Path('.task-inputs').rglob('value.txt')).read_text()
+    assert data == 'worker'
+    Path('src/review.txt').write_text('reviewed: ' + data)
 if mode == 'outside': Path('outside.txt').write_text('bad')
 if mode == 'ignored': Path('ignored.txt').write_text('bad')
 if mode == 'protected': Path('tests/check.txt').write_text('bad')
@@ -45,6 +82,31 @@ if mode == 'sleep': time.sleep(30)
 if mode == 'secret':
     print(os.environ['ANTHROPIC_AUTH_TOKEN'], file=sys.stderr)
     Path('src/value.txt').write_text(os.environ['ANTHROPIC_AUTH_TOKEN'])
+if mode == 'settings_edit':
+    Path(os.environ['LLM_WORKER_SETTINGS']).write_text('{}')
+if mode in ('permission_denied','permission_denied_exit'):
+    print(json.dumps({'is_error':False,'permission_denials':[{'tool_name':'Write','tool_input':{'content':os.environ['ANTHROPIC_AUTH_TOKEN']}}]}))
+    sys.exit(7 if mode == 'permission_denied_exit' else 0)
+if mode == 'compute_log_read':
+    record=json.loads(prompt.split('Trusted compute result (already executed; do not relaunch): ',1)[1].split('\n\n',1)[0])
+    for name in ('stdout_path','stderr_path','verification_log','remote_result_path'):
+        path=record[name]
+        assert any(path in rule for rule in settings['permissions']['allow'])
+        assert any(path in rule for rule in settings['permissions']['deny'])
+        assert Path(path).is_file()
+if mode == 'external_read':
+    assert Path(args['input']).read_text() == 'dataset fixture'
+    assert any(args['input'] in rule for rule in settings['permissions']['allow'])
+    assert any(args['input'] in rule for rule in settings['permissions']['deny'])
+if mode == 'remote':
+    assert os.environ['SSH_AUTH_SOCK'].endswith('/fixture-agent.sock')
+    assert 'SSH, scp, sftp, rsync and remote commands' in prompt
+    assert 'Do not use SSH or remote-* for this task' not in prompt
+    for command in ('ssh','scp','sftp','rsync'):
+        assert 'Bash('+command+' *)' in settings['permissions']['allow']
+        assert 'Bash('+command+':*)' not in settings['permissions']['deny']
+    result = subprocess.run(['ssh','lab-fixture','inspect'],capture_output=True,text=True,check=True)
+    Path('src/remote.txt').write_text(result.stdout)
 if mode == 'nonzero': sys.exit(7)
 if mode == 'invalid': print('Tests passed!'); sys.exit(0)
 print(json.dumps({'is_error': mode == 'model_error', 'result': 'all tests passed'}))
@@ -65,11 +127,13 @@ class ManagedTasks(unittest.TestCase):
         (self.mock / "claude").chmod(0o755)
         conf = self.root / "conf"
         conf.mkdir()
-        config = 'export LLM_BASE_URL=http://unused.invalid\nexport LLM_API_KEY=offline-secret-12345\nexport LLM_MODEL=mock-model\n'
+        config = 'export LLM_BASE_URL=http://unused.invalid\nexport LLM_API_KEY=offline-secret-12345\nexport LLM_MODEL=mock-model\nexport LLM_CONTEXT_WINDOW=32000\n'
         (conf / "env").write_text(config)
         (conf / "env.impl").write_text(config)
+        (conf / "env.qwen").write_text(config)
+        (conf / "gateway.env").write_text(config)
         self.env = dict(os.environ, PATH=str(self.mock) + os.pathsep + os.environ["PATH"],
-                        CLAUDE_WORKER_CONF_DIR=str(conf), PYTHONDONTWRITEBYTECODE="1")
+                        LLM_WORKER_CONF_DIR=str(conf), PYTHONDONTWRITEBYTECODE="1", XDG_STATE_HOME=str(self.root / "runtime"))
         # Do not inherit the test runner's Git overrides.
         for key in list(self.env):
             if key.startswith("GIT_"):
@@ -148,6 +212,193 @@ class ManagedTasks(unittest.TestCase):
         p = self.call("run", task, *extra, check=False)
         self.assertEqual(p.returncode, 0 if success else 1, p.stderr + p.stdout)
         return json.loads(p.stdout)
+
+    def test_task_turn_budget_reaches_cli_and_limit_failure_is_distinct(self):
+        state = self.run_task(self.submit('budget', max_turns=320))
+        self.assertEqual(state['max_turns'], 320)
+        self.assertEqual((Path(state['worktree'])/'src/budget.txt').read_text(), '320')
+        result = self.run_task(self.submit('turn_limit'), False)
+        self.assertEqual(result['reason'], 'worker_turn_limit')
+
+    def test_compute_job_is_executed_and_evidence_is_verified_outside_model(self):
+        job = dict(resource='cpu', transport='local', cwd='@worktree',
+                   command=['python3','-c',"from pathlib import Path; Path('src/job.txt').write_text(str(sum(range(11))))"],
+                   verify=[['python3','-c',"from pathlib import Path; assert Path('src/job.txt').read_text() == '55'"]])
+        task = self.submit(role='compute-runner', profile='qwen', compute_job=job)
+        result = self.run_task(task)
+        self.assertEqual(result['profile'], 'qwen')
+        self.assertEqual(result['compute_result']['state'], 'succeeded')
+        self.assertEqual(result['compute_result']['verification_exit_codes'], [0])
+        self.assertIn('src/job.txt', [x['path'] for x in result['changed_files']])
+        evidence = Path(result['compute_result_path'])
+        evidence.write_text('{}')
+        self.assertEqual(self.status(task)['reason'], 'changed_after_verification')
+        bad = dict(job, command=['python3','-c','raise SystemExit(9)'])
+        result = self.run_task(self.submit(role='compute-runner', profile='qwen', compute_job=bad), False)
+        self.assertEqual(result['worker_exit_code'], 0)
+        self.assertEqual(result['reason'], 'compute_exit_nonzero')
+        self.assertEqual(result['compute_result']['command_exit_code'], 9)
+
+    def test_qwen_can_read_only_its_own_local_job_logs_with_native_tools(self):
+        job=dict(resource='cpu',transport='local',cwd='@worktree',
+                 command=['python3','-c','print("job evidence")'],verify=[['python3','-c','assert True']])
+        state=self.run_task(self.submit('compute_log_read',role='compute-runner',profile='qwen',compute_job=job))
+        self.assertEqual(state['permission_denial_count'],0)
+        settings=json.loads(Path(state['worker_settings_path']).read_text())
+        other=str(self.root/'runtime/local-worker/compute/another-run/stdout.log')
+        self.assertFalse(any(other in rule for rule in settings['permissions']['allow']))
+        self.assertFalse(any('local-worker/compute/**' in rule for rule in settings['permissions']['allow']))
+
+    def test_managed_compute_progress_and_cancel_use_existing_task_interface(self):
+        job = dict(resource='cpu', transport='local', cwd='@worktree',
+                   command=['python3','-c','import time;time.sleep(20)'],
+                   verify=[['python3','-c','assert True']], timeout=25)
+        task=self.submit(role='compute-runner', profile='qwen', compute_job=job)
+        process=self.start(task)
+        state=self.wait_for(task, lambda s:s.get('compute_progress',{}).get('state')=='running')
+        self.assertEqual(state['phase'],'compute')
+        self.call('cancel',task)
+        process.wait(timeout=4)
+        result=self.status(task)
+        self.assertEqual(result['state'],'cancelled')
+        self.assertFalse(result['verification_valid'])
+        self.assertIn('compute_cleanup_confirmed', result)
+
+    def test_roles_preserve_legacy_request_but_do_not_forward_effort(self):
+        for role in ("planner", "researcher", "implementer", "test-author", "runner", "analyst", "reviewer"):
+            state = self.run_task(self.submit(role=role, effort="max"))
+            self.assertEqual(state["role"], role)
+            self.assertIsNone(state["effort"])
+            self.assertEqual(state["requested_effort"], "max")
+            self.assertFalse(state["effort_forwarded"])
+        state = self.run_task(self.submit(role="reviewer", effort="high"))
+        self.assertIsNone(state["effort"])
+        self.assertEqual(state["requested_effort"], "high")
+
+    def test_legacy_effort_spec_is_immutable_across_retry(self):
+        task=self.submit(effort='max')
+        folder=self.store/task
+        frozen=(folder/'spec.json').read_bytes()
+        self.env.update(LLM_EFFORT='high',LLM_WORKER_EFFORT='max',CLAUDE_CODE_EFFORT_LEVEL='high')
+        first=self.run_task(task)
+        old=(folder/'attempts/0001/result.json').read_bytes()
+        second=self.run_task(task,True,'--retry')
+        for state in (first,second):
+            self.assertIsNone(state['effort'])
+            self.assertEqual(state['requested_effort'],'max')
+            self.assertFalse(state['effort_forwarded'])
+        self.assertEqual((folder/'spec.json').read_bytes(),frozen)
+        self.assertEqual((folder/'attempts/0001/result.json').read_bytes(),old)
+
+    def test_verified_producer_inputs_are_copied_and_protected(self):
+        producer = self.submit()
+        first = self.run_task(producer)
+        consumer = self.submit("consume", role="reviewer", inputs=[{"task_id": producer, "paths": ["src/value.txt"]}])
+        result = self.run_task(consumer)
+        self.assertEqual(result["inputs"][0]["attempt_id"], first["attempt_id"])
+        copied = Path(result["worktree"]) / ".task-inputs" / producer / "src/value.txt"
+        self.assertEqual(copied.read_text(), "worker")
+        self.assertFalse(copied.is_symlink())
+        self.assertNotEqual(copied.stat().st_ino, (Path(first["worktree"]) / "src/value.txt").stat().st_ino)
+        self.assertEqual(self.status(producer)["state"], "succeeded")
+        bad = self.submit("input_edit", inputs=[{"task_id": producer, "paths": ["src/value.txt"]}], allowed_paths=["*"])
+        bad_result = self.run_task(bad, False)
+        self.assertEqual(bad_result["reason"], "path_policy_violation")
+        self.assertEqual(self.status(producer)["state"], "succeeded")
+
+    def test_stale_or_failed_producer_is_never_consumed(self):
+        producer = self.submit()
+        state = self.run_task(producer)
+        task = self.submit("consume", inputs=[{"task_id": producer, "paths": ["src/value.txt"]}])
+        (Path(state["worktree"]) / "src/value.txt").write_text("changed after success")
+        result = self.run_task(task, False)
+        self.assertEqual(result["reason"], "execution_error")
+        self.assertIsNone(result["worker_exit_code"])
+        self.assertIn("input", result["error"])
+        spec = self.root / "spec.json"
+        for source in (producer, self.submit("model_error")):
+            raw = dict(purpose="review", repository=str(self.repo), instructions="review", allowed_paths=["reports/"],
+                       verify=["true"], inputs=[{"task_id": source, "paths": ["src/value.txt"]}])
+            spec.write_text(json.dumps(raw))
+            self.assertEqual(self.call("submit", spec, check=False).returncode, 2)
+
+    def test_symlink_input_refused_even_from_successful_task(self):
+        producer = self.submit("symlink_output")
+        self.run_task(producer)
+        spec = self.root / "bad-link.json"
+        spec.write_text(json.dumps(dict(purpose="review", repository=str(self.repo), instructions="review",
+            allowed_paths=["reports/"], verify=["true"], inputs=[{"task_id": producer, "paths": ["src/link.txt"]}])))
+        self.assertEqual(self.call("submit", spec, check=False).returncode, 2)
+
+    def test_test_author_candidates_cannot_replace_acceptance_tests(self):
+        task = self.submit("candidate", role="test-author", allowed_paths=["candidate-tests/"],
+                           verify=["python3 -B candidate-tests/test_candidate.py"])
+        result = self.run_task(task)
+        self.assertEqual(result["role"], "test-author")
+        self.assertEqual((Path(result["worktree"]) / "tests/check.txt").read_text(), "base")
+        result = self.run_task(self.submit("protected", role="test-author", allowed_paths=["*"]), False)
+        self.assertEqual(result["reason"], "path_policy_violation")
+
+    def test_input_symlink_and_unsubmitted_paths_refused(self):
+        producer = self.submit()
+        self.run_task(producer)
+        for path in ("../outside", "tests/check.txt", "src/", ".git", "/absolute"):
+            spec = self.root / "bad-input.json"
+            spec.write_text(json.dumps(dict(purpose="review", repository=str(self.repo), instructions="review",
+                allowed_paths=["reports/"], verify=["true"], inputs=[{"task_id": producer, "paths": [path]}])))
+            self.assertEqual(self.call("submit", spec, check=False).returncode, 2)
+
+    def test_worker_permissions_are_runtime_files_outside_worktree(self):
+        state=self.run_task(self.submit())
+        self.assertEqual(state['permission_profile'],'workspace')
+        self.assertTrue(Path(state['worker_settings_path']).is_file())
+        self.assertFalse(Path(state['worker_settings_path']).is_relative_to(Path(state['worktree'])))
+        self.assertEqual(state['permission_denial_count'],0)
+        state=self.run_task(self.submit(permission_profile='inherit'))
+        self.assertIsNone(state['worker_settings_path'])
+
+    def test_remote_commands_reach_worker_and_leave_the_original_checkout_unchanged(self):
+        self.env['SSH_AUTH_SOCK'] = str(self.root / 'fixture-agent.sock')
+        ssh = self.mock / 'ssh'
+        ssh.write_text('#!/bin/sh\n[ "$1" = lab-fixture ] && [ "$2" = inspect ] || exit 7\nprintf "REMOTE_OK\\n"\n')
+        ssh.chmod(0o755)
+        state = self.run_task(self.submit('remote', verify=['test "$(cat src/remote.txt)" = REMOTE_OK']))
+        self.assertEqual(state['permission_denial_count'], 0)
+        self.assertTrue(state['verification_valid'])
+        self.assertEqual((Path(state['worktree']) / 'src/remote.txt').read_text(), 'REMOTE_OK\n')
+        self.assertEqual(self.git('status', '--porcelain'), b'')
+        self.assertFalse((self.repo / 'src/remote.txt').exists())
+
+    def test_permission_denials_are_failures_and_not_natural_language_success(self):
+        state=self.run_task(self.submit('permission_denied'),False)
+        self.assertEqual(state['reason'],'permission_denied')
+        self.assertEqual(state['permission_denial_count'],1)
+        self.assertEqual(state['permission_denied_tools'],['Write'])
+        self.assertFalse(state['verification_valid'])
+        self.assertNotIn('offline-secret',json.dumps(state))
+        state=self.run_task(self.submit('permission_denied_exit'),False)
+        self.assertEqual(state['reason'],'permission_denied')
+        self.assertEqual(state['worker_exit_code'],7)
+
+    def test_external_data_and_proposed_settings_are_frozen_at_submit(self):
+        data=self.root/'external dataset.txt';data.write_text('dataset fixture')
+        proposed=self.root/'proposed-settings.json'
+        proposed.write_text(json.dumps({'permissions':{'deny':['Bash(pip *)']}}))
+        task=self.submit('external_read',instructions=json.dumps({'mode':'external_read','input':str(data)}),
+                         read_paths=[str(data)],permissions_file=str(proposed))
+        proposed.write_text('{}')
+        state=self.run_task(task)
+        settings=json.loads(Path(state['worker_settings_path']).read_text())
+        self.assertIn('Bash(pip *)',settings['permissions']['deny'])
+        self.assertEqual(data.read_text(),'dataset fixture')
+        self.assertEqual(self.git('status','--porcelain'),b'')
+
+    def test_worker_settings_tampering_invalidates_verification(self):
+        state=self.run_task(self.submit('settings_edit'),False)
+        self.assertEqual(state['reason'],'permission_settings_changed')
+        state=self.run_task(self.submit())
+        Path(state['worker_settings_path']).write_text('{}')
+        self.assertEqual(self.status(state['task_id'])['state'],'failed')
 
     def test_workspaces_separate_and_original_dirty_preserved(self):
         (self.repo / "src/value.txt").write_text("staged")
@@ -298,6 +549,20 @@ class ManagedTasks(unittest.TestCase):
         registered.write_text(json.dumps(spec))
         self.assertEqual(self.call("run", task, check=False).returncode, 2)
 
+    def test_shared_gateway_key_is_redacted_and_rejected_in_specs(self):
+        gateway = Path(self.env["LLM_WORKER_CONF_DIR"]) / "gateway.env"
+        gateway.write_text(gateway.read_text().replace("offline-secret-12345", "gateway-only-secret-98765"))
+        state = self.run_task(self.submit("secret", verify=["true"]))
+        for filename in [state["logs"]["worker_stderr"], state["diff_path"]]:
+            text = Path(filename).read_text()
+            self.assertNotIn("gateway-only-secret-98765", text)
+            self.assertIn("[REDACTED]", text)
+        spec = self.root / "spec.json"
+        data = json.loads(spec.read_text())
+        data["instructions"] = "gateway-only-secret-98765"
+        spec.write_text(json.dumps(data))
+        self.assertEqual(self.call("submit", spec, check=False).returncode, 2)
+
     def test_control_file_and_background_children(self):
         state = self.run_task(self.submit("control", allowed_paths=["*"]), False)
         self.assertEqual(state["reason"], "path_policy_violation")
@@ -366,6 +631,24 @@ class ManagedTasks(unittest.TestCase):
         self.assertEqual(registered["compute_backend"], "local")
         state = self.run_task(task)
         self.assertEqual(state["compute_backend"], "local")
+
+    def test_whole_module_creation_without_a_skeleton(self):
+        (self.repo / "tests/test_generated.py").write_text(
+            'import sys, unittest\nsys.path.insert(0, "src")\nfrom generated import twice\n'
+            'class GeneratedTests(unittest.TestCase):\n'
+            '    def test_contract(self):\n'
+            '        self.assertEqual(twice(3), 6)\n'
+            '        self.assertEqual(twice(-2), -4)\n')
+        self.git("add", "tests/test_generated.py")
+        self.git("commit", "-qm", "independent acceptance test, no implementation")
+        self.assertFalse((self.repo / "src/generated.py").exists())
+        task = self.submit("new_module", allowed_paths=["src/generated.py"],
+                           references=["tests/test_generated.py"],
+                           verify=["python3 -B -m unittest discover -s tests -p test_generated.py -v"])
+        state = self.run_task(task)
+        self.assertEqual(state["changed_files"], [{"path": "src/generated.py", "change": "added"}])
+        self.assertEqual(state["verification_exit_codes"], [0])
+        self.assertFalse((self.repo / "src/generated.py").exists())
 
 
 if __name__ == "__main__":

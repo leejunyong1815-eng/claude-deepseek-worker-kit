@@ -1,0 +1,35 @@
+{
+  "base_url": "http://1.233.219.161:4000",
+  "checked_at": "2026-11-04T16:09:19.857615+00:00",
+  "authentication": "none",
+  "checks": [
+    {
+      "model": "deepseek-v4.1-flash-oai",
+      "check": "responses_text",
+      "passed": true,
+      "completed": true,
+      "usage": {
+        "input_tokens": 36,
+        "input_tokens_details": {
+          "audio_tokens": null,
+          "cached_tokens": 35,
+          "cached_tokens_details": null,
+          "image_tokens": null,
+          "text_tokens": null,
+          "video_tokens": null,
+          "cache_write_tokens": 0
+        },
+        "output_tokens": 16,
+        "output_tokens_details": {
+          "audio_tokens": null,
+          "reasoning_tokens": 13,
+          "text_tokens": null
+        },
+        "total_tokens": 52,
+        "cost": null
+      },
+      "duration_seconds": 0.174
+    }
+  ],
+  "note": "Only protocol metadata and token counters retained. Initial strict marker reproduction failures remain recorded; simple PONG rechecks are separate. No keys or thinking text."
+}

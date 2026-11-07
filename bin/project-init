@@ -4,13 +4,14 @@
 #   넣는 것: AGENTS.md, KICKOFF_PROMPT.md, agents/ (역할·태스크 양식·훅), .claude/settings.json (편집 후 자동 검사 훅)
 #   이미 있는 파일은 덮어쓰지 않는다. .claude/settings.json 이 이미 있으면 훅 항목을 직접 합치라고 안내한다.
 set -euo pipefail
+source "$(dirname "$(readlink -f "$0")")/_kit_env.sh"
 DIR="$(cd "${1:-$PWD}" && pwd)"
-CONF_DIR="${CLAUDE_WORKER_CONF_DIR:-$HOME/.config/claude-worker}"
-KIT="${CLAUDE_WORKER_KIT:-}"
+CONF_DIR="${LLM_WORKER_CONF_DIR:-$HOME/.config/local-worker}"
+KIT="${LLM_WORKER_KIT:-}"
 [ -n "$KIT" ] || { [ -f "$CONF_DIR/kit_dir" ] && KIT="$(cat "$CONF_DIR/kit_dir")"; } || true
 [ -n "$KIT" ] || { d="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"; [ -d "$d/templates/project" ] && KIT="$d"; } || true
 [ -n "$KIT" ] || { [ -d "$HOME/claude-local-worker-kit/templates/project" ] && KIT="$HOME/claude-local-worker-kit"; } || true
-[ -n "$KIT" ] && [ -d "$KIT/templates/project" ] || { echo "project-init: 키트 디렉터리를 못 찾았습니다. CLAUDE_WORKER_KIT=<키트 경로> 로 지정하세요." >&2; exit 2; }
+[ -n "$KIT" ] && [ -d "$KIT/templates/project" ] || { echo "project-init: 키트 디렉터리를 못 찾았습니다. LLM_WORKER_KIT=<키트 경로> 로 지정하세요." >&2; exit 2; }
 SRC="$KIT/templates/project"
 
 added=0; kept=0
@@ -35,3 +36,4 @@ if [ -e "$DIR/.claude/settings.json" ]; then
     fi
 else copy_tree .claude/settings.json; fi
 echo "  추가 $added, 유지 $kept.  다음: AGENTS.md 와 agents/ROLE_*.md 를 프로젝트에 맞게 고치고, KICKOFF_PROMPT.md 를 오케스트레이터 창에 붙여 넣는다."
+echo "  기존 규칙 갱신: project-update --check <프로젝트> 후 --apply (수정본 보존·충돌 제안)."

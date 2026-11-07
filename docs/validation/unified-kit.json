@@ -1,0 +1,141 @@
+{
+  "date": "2026-11-07",
+  "original_base": "37de483a975ac102b77059e9213735a03b0a4024",
+  "deepseek_base": "37905806e407fd85d6a3fad288f609c80454bd54",
+  "offline_tests": {
+    "command": "./tests/selftest.sh",
+    "core": 119,
+    "demo": 8,
+    "total": 127,
+    "passed": true
+  },
+  "isolated_ui": {
+    "isolation": {
+      "host_home_hidden": true,
+      "usr_read_only": true
+    },
+    "modes": [
+      {
+        "main": "codex",
+        "mode": "real tmux panes",
+        "pool_id": "p-02da491159cf470180c8526521b23982",
+        "states": [
+          "succeeded",
+          "succeeded"
+        ],
+        "owned_titles": [
+          "[owned] llm-worker-내것 ;$(touch INJECTED)",
+          "[owned] llm-worker-2"
+        ]
+      },
+      {
+        "main": "claude",
+        "mode": "real tmux panes",
+        "pool_id": "p-a3ff64b85e3e47fd9331acdf65e3dfe8",
+        "states": [
+          "succeeded",
+          "succeeded"
+        ],
+        "owned_titles": [
+          "[owned] llm-worker-내것 ;$(touch INJECTED)",
+          "[owned] llm-worker-2"
+        ]
+      }
+    ],
+    "real_model_calls": false,
+    "native_cli_help": {
+      "codex": "0.165.0",
+      "claude": "2.1.314",
+      "passed": true
+    },
+    "source_preserved": true,
+    "passed": true
+  },
+  "live_workers": {
+    "main": "scripted Codex CLI; no paid main inference",
+    "workers": "real Claude CLI 2.1.314 and lab models",
+    "gateway": "http://1.233.219.161:4000",
+    "tasks": [
+      {
+        "task_id": "t-d02e4526035c43789cd6512adf7e03f3",
+        "attempt_id": "0001",
+        "worker_id": "w-ef2b31cae534",
+        "backend": "default",
+        "model": "deepseek-v4.1-flash",
+        "role": "implementer",
+        "state": "succeeded",
+        "reason": null,
+        "worker_exit_code": 0,
+        "verification_exit_codes": [
+          0
+        ],
+        "permission_denial_count": 0,
+        "verification_valid": true,
+        "compute_result": null,
+        "model_ids_from_cli": [
+          "deepseek-v4.1-flash"
+        ]
+      },
+      {
+        "task_id": "t-255bebe10d3d4a31854b358666ea8089",
+        "attempt_id": "0001",
+        "worker_id": "w-d23dca8bdb6f",
+        "backend": "default",
+        "model": "qwen3.8-flash-next",
+        "role": "compute-runner",
+        "state": "succeeded",
+        "reason": null,
+        "worker_exit_code": 0,
+        "verification_exit_codes": [
+          0
+        ],
+        "permission_denial_count": 0,
+        "verification_valid": true,
+        "compute_result": {
+          "run_id": "c-7bc77094487e46ea9b537cf9a6834864",
+          "state": "succeeded",
+          "transport": "local",
+          "ssh_host": null,
+          "spec_digest": "a2aa3a074ac1a724bbdbe09a1a5f1832869da22c2b3b69618eae1e8311a0085a",
+          "started_at": 1794018408.7008185,
+          "reason": null,
+          "command_exit_code": 0,
+          "verification_exit_codes": [
+            0
+          ],
+          "timed_out": false,
+          "wait_timed_out": false,
+          "verification_timed_out": false,
+          "selected_gpus": [],
+          "selected_gpu_uuids": [],
+          "resource": "cpu",
+          "cwd": "/work/runs/tmp4v92kxre/pools/p-8bddca2774c74d229c002b22cb1f50a3/tasks/t-255bebe10d3d4a31854b358666ea8089/attempts/0001/worktree",
+          "source_commit": "d44ba7c4d98e44d267d49b70ddfcc002c8e2683f",
+          "source_dirty": false,
+          "source_pinned": false,
+          "stdout_path": "/work/runs/tmp4v92kxre/state/local-worker/compute/c-7bc77094487e46ea9b537cf9a6834864/stdout.log",
+          "stderr_path": "/work/runs/tmp4v92kxre/state/local-worker/compute/c-7bc77094487e46ea9b537cf9a6834864/stderr.log",
+          "verification_log": "/work/runs/tmp4v92kxre/state/local-worker/compute/c-7bc77094487e46ea9b537cf9a6834864/verification.log",
+          "remote_result_path": "/work/runs/tmp4v92kxre/state/local-worker/compute/c-7bc77094487e46ea9b537cf9a6834864/result.json",
+          "finished_at": 1794018408.8135257,
+          "duration_seconds": 0.10592508316040039,
+          "remote_cleanup_confirmed": true,
+          "transport_exit_code": 0
+        },
+        "model_ids_from_cli": [
+          "qwen3.8-flash-next"
+        ]
+      }
+    ],
+    "seconds": 41.06,
+    "main_exit_code": 0,
+    "source_preserved": true,
+    "passed": true
+  },
+  "limitations": [
+    "Paid Codex and Opus main inference was not called. Main decisions were scripted; real Codex 0.165.0 and Claude 2.1.314 CLI help/option parsing was checked.",
+    "Real DeepSeek and Qwen calls used the existing lab gateway. The Qwen job used local CPU; no actual remote SSH/GPU job was run.",
+    "No token-saving percentage, throughput improvement or relative model quality was measured. Idle workers do not call a model and wait blocks without repeated model turns.",
+    "The OS test hid host home and mounted /usr read-only; networking was shared. Product worktrees and tool permissions themselves are not a security sandbox."
+  ]
+}

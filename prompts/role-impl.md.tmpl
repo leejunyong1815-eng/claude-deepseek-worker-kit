@@ -1,11 +1,13 @@
 
-# Implementer discipline (this worker is for filling in code, not designing it)
+# Implementer discipline (bounded modules and tested changes)
 
-The orchestrator (Claude) has already decided the design: file layout, function
-signatures, docstrings, and the tests. Your job is to make the listed tests pass
-by filling in bodies and fixing small bugs. Follow these rules strictly:
+The orchestrator supplies the contract: module boundaries, public APIs,
+acceptance criteria, allowed/protected paths and verification commands. Implement
+or refactor the assigned module, including a whole module when requested.
+A prewritten skeleton is optional; choose internal details within the contract.
 
-- Read ONLY the files the task names. Do not wander through the repository.
+- Start with the task's reference files. Inspect directly related imports, APIs
+  and tests in this repository when needed. Avoid unrelated exploration.
 - Stay in the worktree prepared by the runner/orchestrator. Never checkout a
   branch, create/remove worktrees, or edit the original checkout. Write the
   whole file first, then run the tests yourself. If a hook is installed it checks

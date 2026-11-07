@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+"""Register Anthropic-compatible servers and any number of models; no network calls."""
+import argparse
+import getpass
+import json
+import os
+from pathlib import Path
+import shutil
+import tempfile
+from _backends import atomic, catalog, conf_dir, load, locked, public, valid_name, validate, GENERAL
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    sub = parser.add_subparsers(dest='command', required=True)
+    add = sub.add_parser('add')
+    add.add_argument('name')
+    add.add_argument('--url', required=True)
+    add.add_argument('--model', action='append', required=True)
+    add.add_argument('--context', type=int, default=262144)
+    add.add_argument('--roles', default=','.join(GENERAL))
+    add.add_argument('--max-parallel', type=int, default=2)
+    add.add_argument('--auth', choices=['none', 'api_key'], default='none')
+    add.add_argument('--key-env')
+    add.add_argument('--replace', action='store_true')
+    model = sub.add_parser('model-add')
+    model.add_argument('name')
+    model.add_argument('model')
+    model.add_argument('--context', type=int, default=262144)
+    model.add_argument('--roles', default=','.join(GENERAL))
+    sub.add_parser('list')
+    show = sub.add_parser('show')
+    show.add_argument('name')
+    default = sub.add_parser('default')
+    default.add_argument('name')
+    args = parser.parse_args()
+    if args.command == 'list':
+        print(json.dumps(catalog(), ensure_ascii=False, indent=2))
+        return
+    name = valid_name(args.name)
+    if args.command == 'show':
+        print(json.dumps(public(name, load(name)), ensure_ascii=False, indent=2))
+        return
+    if args.command == 'default':
+        load(name)
+        with locked() as conf:
+            target = conf / 'default-backend'
+            fd, tmp = tempfile.mkstemp(dir=conf)
+            with os.fdopen(fd, 'w') as out:
+                out.write(name + '\n')
+            os.replace(tmp, target)
+        print('Default backend: ' + name)
+        return
+    if name == 'default':
+        parser.error('default is the existing gateway; register a named server')
+    key = ''
+    if args.command == 'add' and args.auth == 'api_key':
+        key = os.environ.get(args.key_env, '') if args.key_env else getpass.getpass('Server API key (hidden): ')
+        if not key:
+            parser.error('private API key is required')
+    with locked() as conf:
+        path = conf / 'backends' / (name + '.json')
+        if args.command == 'add':
+            if path.exists() and (not args.replace):
+                parser.error('backend exists; use --replace explicitly')
+            data = {'url': args.url, 'auth': args.auth, 'key': key, 'max_parallel': args.max_parallel, 'models': [{'id': mid, 'context': args.context, 'roles': args.roles.split(',')} for mid in args.model]}
+        else:
+            data = load(name)
+            data['models'].append({'id': args.model, 'context': args.context, 'roles': args.roles.split(',')})
+        data = validate(data)
+        if path.exists():
+            backup = Path(tempfile.mkdtemp(prefix='backend-backup.', dir=conf))
+            shutil.copy2(path, backup / path.name)
+        atomic(path, data)
+    print(json.dumps(public(name, data), ensure_ascii=False, indent=2))
+if __name__ == '__main__':
+    try:
+        main()
+    except (OSError, ValueError, KeyError, TypeError, EOFError):
+        raise SystemExit('backend registration failed; check names, models and private configuration (contents omitted)')

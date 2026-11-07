@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if [ -z "${LLM_WORKER_CONF_DIR+x}" ] && [ -z "${DEEPSEEK_WORKER_CONF_DIR+x}" ] && [ ! -f "$HOME/.config/local-worker/env" ] && [ -f "$HOME/.config/deepseek-worker/env" ]; then export LLM_WORKER_CONF_DIR="$HOME/.config/deepseek-worker"; fi
+exec "$(dirname "$(readlink -f "$0")")/project-update" "$@"

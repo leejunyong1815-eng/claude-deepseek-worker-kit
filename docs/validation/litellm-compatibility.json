@@ -1,0 +1,167 @@
+{
+  "base_url": "http://1.233.219.161:4000",
+  "checked_at": "2026-11-04T15:54:35.076218+00:00",
+  "authentication": "none",
+  "checks": [
+    {
+      "model": "deepseek-v4.1-flash",
+      "check": "messages_tool_continuation",
+      "passed": true,
+      "tool_calls": 1,
+      "continuation_verified": true,
+      "usage": {
+        "input_tokens": 22,
+        "output_tokens": 23,
+        "cache_read_input_tokens": 371
+      },
+      "duration_seconds": 0.926
+    },
+    {
+      "model": "deepseek-v4.1-flash",
+      "check": "messages_sse",
+      "passed": true,
+      "stream_completed": true,
+      "duration_seconds": 0.435
+    },
+    {
+      "model": "deepseek-v4.1-flash",
+      "check": "messages_effort",
+      "passed": true,
+      "effort_request_accepted": true,
+      "thinking_block_observed": true,
+      "honored_effort_proven": false,
+      "usage": {
+        "input_tokens": 1,
+        "output_tokens": 16,
+        "cache_read_input_tokens": 38
+      },
+      "duration_seconds": 0.208
+    },
+    {
+      "model": "deepseek-v4.1-flash-oai",
+      "check": "chat_tool_continuation",
+      "passed": true,
+      "tool_calls": 1,
+      "continuation_verified": true,
+      "usage": {
+        "completion_tokens": 30,
+        "prompt_tokens": 388,
+        "total_tokens": 418,
+        "prompt_tokens_details": {
+          "cached_tokens": 366
+        }
+      },
+      "duration_seconds": 0.955
+    },
+    {
+      "model": "deepseek-v4.1-flash-oai",
+      "check": "chat_sse",
+      "passed": true,
+      "stream_completed": true,
+      "duration_seconds": 0.225
+    },
+    {
+      "model": "deepseek-v4.1-flash-oai",
+      "check": "responses_text",
+      "passed": false,
+      "error": "invalid_or_incomplete_response",
+      "duration_seconds": 0.152
+    },
+    {
+      "model": "qwen3.8-flash-next",
+      "check": "messages_tool_continuation",
+      "passed": true,
+      "tool_calls": 1,
+      "continuation_verified": true,
+      "usage": {
+        "input_tokens": 407,
+        "output_tokens": 53,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0
+      },
+      "duration_seconds": 2.81
+    },
+    {
+      "model": "qwen3.8-flash-next",
+      "check": "messages_sse",
+      "passed": true,
+      "stream_completed": true,
+      "duration_seconds": 0.891
+    },
+    {
+      "model": "qwen3.8-flash-next",
+      "check": "messages_effort",
+      "passed": true,
+      "effort_request_accepted": true,
+      "thinking_block_observed": true,
+      "honored_effort_proven": false,
+      "usage": {
+        "input_tokens": 61,
+        "output_tokens": 39,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0
+      },
+      "duration_seconds": 0.972
+    },
+    {
+      "model": "qwen3.8-flash-next-oai",
+      "check": "chat_tool_continuation",
+      "passed": true,
+      "tool_calls": 1,
+      "continuation_verified": true,
+      "usage": {
+        "completion_tokens": 32,
+        "prompt_tokens": 404,
+        "total_tokens": 436,
+        "completion_tokens_details": {
+          "reasoning_tokens": 11
+        },
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "created_cache_tokens": 0
+        }
+      },
+      "duration_seconds": 2.572
+    },
+    {
+      "model": "qwen3.8-flash-next-oai",
+      "check": "chat_sse",
+      "passed": true,
+      "stream_completed": true,
+      "duration_seconds": 0.856
+    },
+    {
+      "model": "qwen3.8-flash-next-oai",
+      "check": "responses_text",
+      "passed": true,
+      "completed": true,
+      "usage": {
+        "input_tokens": 60,
+        "input_tokens_details": {
+          "audio_tokens": null,
+          "cached_tokens": 0,
+          "cached_tokens_details": null,
+          "image_tokens": null,
+          "text_tokens": null,
+          "video_tokens": null,
+          "cache_write_tokens": 0,
+          "input_tokens_per_turn": [],
+          "cached_tokens_per_turn": []
+        },
+        "output_tokens": 40,
+        "output_tokens_details": {
+          "audio_tokens": null,
+          "reasoning_tokens": 33,
+          "text_tokens": null,
+          "tool_output_tokens": 0,
+          "output_tokens_per_turn": [],
+          "tool_output_tokens_per_turn": []
+        },
+        "total_tokens": 100,
+        "cost": null
+      },
+      "duration_seconds": 1.022
+    }
+  ],
+  "note": "Only protocol metadata and token counters retained. Initial strict marker reproduction failures remain recorded; simple PONG rechecks are separate. No keys or thinking text."
+}

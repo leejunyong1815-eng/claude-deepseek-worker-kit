@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if [ -z "${LLM_WORKER_CONF_DIR+x}" ] && [ -z "${DEEPSEEK_WORKER_CONF_DIR+x}" ] && [ ! -f "$HOME/.config/local-worker/env" ] && [ -f "$HOME/.config/deepseek-worker/env" ]; then export LLM_WORKER_CONF_DIR="$HOME/.config/deepseek-worker"; fi
+_old_tasks="${XDG_STATE_HOME:-$HOME/.local/state}/deepseek-worker/tasks"
+if [ -z "${LLM_TASK_HOME+x}" ] && [ -z "${DEEPSEEK_TASK_HOME+x}" ] && [ -d "$_old_tasks" ]; then export LLM_TASK_HOME="$_old_tasks"; fi
+exec "$(dirname "$(readlink -f "$0")")/worker-task" "$@"

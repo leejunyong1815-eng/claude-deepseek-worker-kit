@@ -95,7 +95,7 @@ class LabDemoTests(unittest.TestCase):
         weakened = run / "weak-task.json"
         weakened.write_text(json.dumps(spec))
         env = dict(os.environ, PATH=str(run / "mock-bin") + os.pathsep + os.environ["PATH"],
-                   CLAUDE_WORKER_CONF_DIR=str(run / "mock-conf"),
+                   LLM_WORKER_CONF_DIR=str(run / "mock-conf"),
                    DEMO_REHEARSAL_REFERENCE=str(DEMO / "reference"), PYTHONDONTWRITEBYTECODE="1")
         runner = [str(DEMO.parent / "bin/worker-task"), "--state-dir", metadata["state_dir"]]
         task = subprocess.check_output(runner + ["submit", str(weakened)], env=env, text=True).strip()
@@ -146,9 +146,9 @@ class LabDemoTests(unittest.TestCase):
             if override:
                 env["DEMO_ORCHESTRATOR_MODEL"] = override
             args = json.loads(subprocess.check_output([launcher], env=env, text=True))
-            self.assertEqual(args[args.index("--model") + 1], override or "claude-fable-5-1")
+            self.assertEqual(args[args.index("--model") + 1], override or "opus")
             self.assertEqual(args[args.index("--name") + 1], "lab-demo-" + info["run_id"])
-            self.assertEqual(args[args.index("--effort") + 1], "high")
+            self.assertNotIn("--effort", args)
             self.assertNotIn("--dangerously-skip-permissions", args)
             self.assertIn("local CPU", args[args.index("--append-system-prompt") + 1])
 

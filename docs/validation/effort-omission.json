@@ -1,0 +1,162 @@
+{
+  "checked_at": "2026-11-06T02:50:03.155425+00:00",
+  "base_kit_commit": "655c366db8f545013cc08fd216c82c19a4578d2b",
+  "claude_cli": "2.1.314",
+  "offline_tests": {
+    "core": 90,
+    "demo": 8,
+    "total": 98,
+    "passed": true,
+    "network": "separate network namespace"
+  },
+  "isolation": {
+    "host_home_hidden": true,
+    "host_root_home_hidden": true,
+    "usr_read_only": true,
+    "fresh_home": true,
+    "no_inherited_credentials": true,
+    "no_inherited_worker_config": true
+  },
+  "legacy_profile_update_preserved": true,
+  "explicit_effort_cli_flag": false,
+  "explicit_effort_environment": false,
+  "http_effort_field_removed": false,
+  "note": "Claude CLI may add its own default high effort. No keys, prompts, thinking text or cost estimates are retained.",
+  "tasks": [
+    {
+      "task_id": "t-408f0723efce42ef8cd120f9861db062",
+      "attempt_id": "0001",
+      "state": "succeeded",
+      "reason": null,
+      "role": "implementer",
+      "profile": "",
+      "worker_exit_code": 0,
+      "verification_exit_codes": [
+        0
+      ],
+      "permission_denial_count": 0,
+      "worker_timed_out": false,
+      "changed_files": [
+        {
+          "path": "src/calc.py",
+          "change": "modified"
+        }
+      ],
+      "worktree": "/work/final live home/.local/state/deepseek-worker/tasks/t-408f0723efce42ef8cd120f9861db062/attempts/0001/worktree",
+      "compute_result": null,
+      "effort": null,
+      "requested_effort": "max",
+      "effort_forwarded": false,
+      "model_ids": [
+        "deepseek-v4.1-flash"
+      ]
+    },
+    {
+      "task_id": "t-5bb25402ac084b77819c8c5be30b1a36",
+      "attempt_id": "0001",
+      "state": "succeeded",
+      "reason": null,
+      "role": "compute-runner",
+      "profile": "qwen",
+      "worker_exit_code": 0,
+      "verification_exit_codes": [
+        0
+      ],
+      "permission_denial_count": 0,
+      "worker_timed_out": false,
+      "changed_files": [
+        {
+          "path": "reports/cpu.json",
+          "change": "added"
+        },
+        {
+          "path": "reports/operator.md",
+          "change": "added"
+        }
+      ],
+      "worktree": "/work/final live home/.local/state/deepseek-worker/tasks/t-5bb25402ac084b77819c8c5be30b1a36/attempts/0001/worktree",
+      "compute_result": {
+        "run_id": "c-77cebc1a6a11488da8220e1ef758c44f",
+        "state": "succeeded",
+        "transport": "local",
+        "ssh_host": null,
+        "spec_digest": "443e507ea3895d7a56b90d827b492dea7081baa95c2305c9d32156d09c13539c",
+        "started_at": 1793933244.3065417,
+        "reason": null,
+        "command_exit_code": 0,
+        "verification_exit_codes": [
+          0
+        ],
+        "timed_out": false,
+        "wait_timed_out": false,
+        "verification_timed_out": false,
+        "selected_gpus": [],
+        "selected_gpu_uuids": [],
+        "resource": "cpu",
+        "cwd": "/work/final live home/.local/state/deepseek-worker/tasks/t-5bb25402ac084b77819c8c5be30b1a36/attempts/0001/worktree",
+        "source_commit": "8f451e55f67c4cf9f13383c0240aee53b9faf308",
+        "source_dirty": false,
+        "source_pinned": false,
+        "stdout_path": "/work/final live home/.local/state/deepseek-worker/compute/c-77cebc1a6a11488da8220e1ef758c44f/stdout.log",
+        "stderr_path": "/work/final live home/.local/state/deepseek-worker/compute/c-77cebc1a6a11488da8220e1ef758c44f/stderr.log",
+        "verification_log": "/work/final live home/.local/state/deepseek-worker/compute/c-77cebc1a6a11488da8220e1ef758c44f/verification.log",
+        "remote_result_path": "/work/final live home/.local/state/deepseek-worker/compute/c-77cebc1a6a11488da8220e1ef758c44f/result.json",
+        "finished_at": 1793933244.4207554,
+        "duration_seconds": 0.10899829864501953,
+        "remote_cleanup_confirmed": true,
+        "transport_exit_code": 0
+      },
+      "effort": null,
+      "requested_effort": "max",
+      "effort_forwarded": false,
+      "model_ids": [
+        "qwen3.8-flash-next"
+      ]
+    }
+  ],
+  "request_metadata": [
+    {
+      "request_controls": [
+        {
+          "model": "qwen3.8-flash-next",
+          "effort": "high",
+          "thinking_type": "adaptive",
+          "count": 4
+        }
+      ],
+      "native_job_log_reads": [
+        "/work/final live home/.local/state/deepseek-worker/compute/c-77cebc1a6a11488da8220e1ef758c44f/stderr.log",
+        "/work/final live home/.local/state/deepseek-worker/compute/c-77cebc1a6a11488da8220e1ef758c44f/stdout.log",
+        "/work/final live home/.local/state/deepseek-worker/compute/c-77cebc1a6a11488da8220e1ef758c44f/verification.log"
+      ],
+      "api_error_statuses": []
+    },
+    {
+      "request_controls": [
+        {
+          "model": "deepseek-v4.1-flash",
+          "effort": "high",
+          "thinking_type": "adaptive",
+          "count": 7
+        }
+      ],
+      "native_job_log_reads": [],
+      "api_error_statuses": []
+    }
+  ],
+  "prior_failed_attempts_preserved": [
+    {
+      "task_id": "t-f129981c944a43db9a3835e7cddf0e5d",
+      "state": "failed",
+      "reason": "permission_denied",
+      "permission_denial_count": 1
+    }
+  ],
+  "fix": "Allow native read-only access to this local compute run logs only; no broader permission or remote log access.",
+  "source_fixture_preserved": {
+    "head": true,
+    "index": true,
+    "files": true,
+    "clean": true
+  }
+}

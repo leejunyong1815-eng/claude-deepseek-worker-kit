@@ -1,35 +1,35 @@
-# 에이전트 운영 규칙 (Claude 오케스트레이터 + 로컬 LLM 워커)
+# Codex/Claude 오케스트레이터 + LLM 워커 규칙
 
-## 역할
-| 역할 | 세션 | 프롬프트 | 책임 |
-|---|---|---|---|
-| Orchestrator | `claude-main` (Claude) | agents/ORCHESTRATOR.md | 목표·게이트 관리, 태스크 분해, **스켈레톤·테스트 작성**, 결과 검토(diff·테스트 직접 확인), 문서 갱신 |
-| Implementer | `@llm-worker-impl` (`claude-duo -P impl`, 없으면 `@llm-worker`) | agents/ROLE_IMPLEMENTER.md | 스켈레톤 채우기, 테스트 통과시키기, 작은 버그 수정 |
-| Runner | `@llm-worker` (게이트웨이 모델) 또는 `@llm-worker-vega` (보조, 느림) | agents/ROLE_RUNNER.md | 계산 노드에서 실험 실행, 로그·결과 저장 |
-| Analyst | `@llm-worker` (게이트웨이 모델) | agents/ROLE_ANALYST.md | 결과 집계, 그림 생성, 판정 초안 |
+관리 워커(LLM_TASK_MANAGED=1)는 배정된 태스크 계약과 역할을 수행한다. 아래 오케스트레이터 절차로
+자기 태스크를 다시 등록하거나 claude-main을 실행하지 않는다. 작업 공간·검증·보존 규칙은 동일하게 적용한다.
 
-## 작업 단위
-- 태스크는 `agents/tasks/*.md` 하나씩. 목적·읽을 파일·절차·산출물·수용 기준·반증 체크를 적는다. 구현 태스크는 `agents/tasks/T_impl_template.md` 양식.
-- 구현 위임은 `worker-task submit/run/status/result/cancel` 관리 모드를 권장한다. 실행기가 기준 커밋에서 별도 worktree를 준비한다. 워커는 그 안에서만 작업하고 checkout·add·commit하지 않는다.
-- 미커밋 스켈레톤·테스트는 worktree에 포함되지 않는다. 의존한다면 `depends_on_uncommitted: true`로 차단하고, 사용자가 필요한 입력의 기준 커밋을 준비한 뒤 새로 등록한다.
-- 사용자가 기준 커밋 생성을 명시적으로 허용했다면 오케스트레이터가 승인된 파일만 경로를 명시해 커밋할 수 있다. 관련 없는 사용자 변경은 포함하지 않는다.
-- 수동 메시징은 자동 격리·상태·검증을 제공하지 않는다. 코드 편집 전 오케스트레이터가 독립 작업 공간을 준비하고 외부 검증을 수행한다. 서로의 작업 공간을 편집하지 않는다.
-- 수동 실험 결과는 `results/<exp>_<tag>/`에 데이터 + `REPORT.md`(HANDOFF_TEMPLATE 형식).
-- 관리 구현 태스크는 실행기가 worktree 밖에 결과·로그·diff를 저장한다. 워커는 지정된 허용 경로만 수정하고 보고는 응답으로 전달한다. `worker-task result <ID>`로 최종 기록을 확인한다.
-- 모든 숫자에는 출처(스크립트, config, 커밋 해시, 노드, 날짜)가 붙는다. 숫자 없는 주장은 받지 않는다.
+메인은 Claude 계정의 Opus 또는 Codex 계정/설정의 모델을 사용한다. 사용자가 목표를 말하면 필요한 관리 워커를 직접 호출한다.
+메인의 native Agent/Task/Workflow/팀/fork Skill은 런처에서 차단된다. 워커 모델은 서버/모델 레지스트리로 선택한다.
+조사·설계 초안·모듈 구현·테스트 초안·실행·분석·독립 리뷰를 등록된 LLM 관리 태스크에 먼저 배정한다.
+정책과 절차는 agents/ORCHESTRATOR.md, 역할은 agents/ROLE_*.md를 읽는다.
 
-## 자동 검사
-- `.claude/settings.json` 의 PostToolUse 훅이 파일을 고칠 때마다 `agents/hooks/post-edit-check.sh` 를 돌린다 (문법 → lint; 테스트는 기본 끔).
-  실패하면 그 출력이 워커의 다음 턴에 들어간다. 편집마다 테스트까지 돌리려면 `agents/hooks/check.conf` 에 `TEST_CMD="auto"`.
+- 관리 CLI: worker-task submit/run/status/result/cancel. role은 researcher, planner, implementer,
+  test-author, runner, analyst, reviewer 중 선택한다. Compute Job은 Qwen의 compute-runner에 배정한다. effort는 명세에 지정하지 않는다.
+- 메인은 목표·계약·예산·권한·독립 수용 검사 신뢰성·최종 결정에 집중한다. 스켈레톤은 선택이다.
+- 여러 관련 파일과 완결된 모듈을 위임할 수 있다. 단순히 파일이 여러 개라는 이유로 메인이 구현하지 않는다.
+- 별도 task ID/worktree에서 독립 태스크를 병렬 실행할 수 있다. 실제 서버와 로컬 자원을 고려해 수를 정한다.
+- 앞선 산출물은 명세의 inputs로 검증된 시도와 정확한 파일 경로를 지정한다.
+  워커는 자기 worktree의 보호된 .task-inputs/<task ID>/ 복사본을 읽는다. 자동 소스 병합은 없다.
+- 테스트 초안은 candidate-tests/에 위임한다. 메인이 검토·채택하기 전에는 보호된 수용 검사를 대체하지 않는다.
+- 실행기가 기준 커밋의 detached worktree를 준비한다. 워커는 checkout/add/commit/merge/push하지 않는다.
+- 원본 staged·unstaged·미추적 변경은 포함되지 않는다. 의존성이 있으면 depends_on_uncommitted=true로 차단한다.
+  필요한 커밋은 사용자가 준비한다. 사용자가 명시적으로 허용한 경우에만 메인이 승인된 파일을 커밋할 수 있다.
+- 서로의 작업 공간·Git 상태를 바꾸지 않는다. 실패·취소·중단 결과는 보존한다. 자동 삭제·stash·반영하지 않는다.
+- 관리 권한 기본은 workspace다. 외부 데이터는 read_paths, 외부 임시 출력은 scratch_paths로 명시한다. 권한 거절을 직접 구현으로 대체하지 않고 permission_denied를 해결한다.
+- workspace는 일반 Bash·환경 도구·웹·에이전트와 SSH/scp/sftp/rsync를 허용한다. 원격 조사·설정·실행·전송은 등록된 LLM 워커에 실제 호스트·원격 경로·범위·예산을 지정해 맡긴다. 기존 deny/ask는 보존한다.
+- 코드 작업은 local/WSL이다. 명시된 Compute Job은 compute_job의 local/ssh 대상에서 실행한다.
+  추론 서버를 SSH 계산 대상으로 추정하지 않는다. 원격 source 자동 업로드는 없으며 필요한 전송은 별도 태스크에 명시한다.
+  Qwen은 잡 운영, 일반 역할 모델은 일반 서브에이전트 업무와 실험 코드·분석을 맡는다.
+- 직접 SSH의 원격 변경·프로세스는 로컬 worktree 검증/취소에 자동 포함되지 않는다. 원격 revision·결과 근거를 남기며 대기/GPU 배정·원격 취소가 필요한 잡은 compute_job을 쓴다.
+- 워커 종료 코드 0이나 '테스트 통과' 보고는 성공이 아니다. 외부 검증과 코드 해시·diff를 확인한다.
+- worktree는 보안 샌드박스가 아니다. 같은 사용자 권한의 절대 경로/공유 Git refs 접근을 차단하지 않는다.
+- 기존 대화형 메시징은 유지되지만 자동 격리·상태·검증이 없다. 코드 작업에는 관리 모드를 사용한다.
+- 모든 수치에는 실행 명령·입력·결과 파일 근거를 붙인다. 실제 위임 비율·속도/비용 절감을 추정하지 않는다.
 
-## 흐름
-1. Orchestrator 가 태스크를 고르고, 구현이면 스켈레톤과 테스트를 기준 커밋에 준비한 뒤 관리 모드로 배정한다. 수동 메시징: `Ask @llm-worker-impl to ...`
-   (수동 메시징 병렬 실행: `claude-duo -w N` → `@llm-worker-1` … `@llm-worker-N`. 관리 모드는 서로 다른 task ID를 각각 실행한다.)
-2. 워커는 지시된 역할 파일을 먼저 읽고 수행, 실패 시 규모를 줄여 재시도 후 보고.
-3. Orchestrator 가 검토: diff 읽기, 테스트 직접 실행, 숫자 재검산, 수용 기준 대조, 다음 태스크 결정, 문서 갱신.
-4. 같은 태스크를 워커가 두 번 실패하면 Orchestrator 가 직접 구현한다 (승격 규칙, ORCHESTRATOR.md).
-5. 워커 정상 종료/보고는 완료 판정이 아니다. 실행기의 허용·보호 경로 검사와 실제 검증 종료 코드가 성공해야 한다. 실패·취소 시도는 보존하고 자동 merge·commit·삭제하지 않는다.
-
-## 금지·주의
-- 워커는 테스트 파일을 고치지 않는다. 테스트 변경은 Orchestrator 만 한다.
-- (프로젝트별 규칙을 여기에 적는다.)
+편집 훅은 .claude/settings.json의 PostToolUse에서 문법/lint를 확인한다. 이는 최종 외부 검증의 대체가 아니다.
+프로젝트별 보호 경로·수용 기준은 태스크마다 추가한다.

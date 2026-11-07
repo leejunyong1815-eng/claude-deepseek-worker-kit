@@ -35,11 +35,13 @@ def rehearse(root):
     root.mkdir(parents=True, exist_ok=False)
     conf, mock = root / "mock-conf", root / "mock-bin"
     conf.mkdir(); mock.mkdir()
-    (conf / "env").write_text('export LLM_BASE_URL="http://127.0.0.1:9"\nexport LLM_API_KEY="none"\nexport LLM_MODEL="offline-demo-mock"\n')
+    (conf / "env").write_text('export LLM_BASE_URL="http://127.0.0.1:9"\nexport LLM_API_KEY="offline-demo-key"\nexport LLM_MODEL="offline-demo-mock"\nexport LLM_CONTEXT_WINDOW="32000"\n')
+    (conf / "gateway.env").write_text('export LLM_BASE_URL="http://127.0.0.1:9"\nexport LLM_AUTH_MODE="api_key"\nexport LLM_API_KEY="offline-demo-key"\n')
+    (conf / "gateway.env").chmod(0o600)
     (mock / "claude").write_text(MOCK)
     (mock / "claude").chmod(0o755)
     env = dict(os.environ, PATH=str(mock) + os.pathsep + os.environ["PATH"],
-               CLAUDE_WORKER_CONF_DIR=str(conf), DEMO_REHEARSAL_REFERENCE=str(DEMO / "reference"),
+               LLM_WORKER_CONF_DIR=str(conf), DEMO_REHEARSAL_REFERENCE=str(DEMO / "reference"),
                PYTHONDONTWRITEBYTECODE="1", CLAUDECODE="1")
     metadata = prepare(root / "project", profile="", mode="offline-rehearsal")
     repo, state = Path(metadata["repository"]), root / "state"

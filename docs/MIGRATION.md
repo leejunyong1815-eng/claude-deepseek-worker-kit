@@ -1,29 +1,51 @@
-# 기존 개인 구성에서 옮기기 (ljy 환경 기준)
+# 두 키트 통합
 
-| 기존 | 새 키트 | 비고 |
-|---|---|---|
-| `~/bin/claude-main` | `claude-main` | 동일. `--remote-control` 은 필요할 때 인자로 (`claude-main --remote-control`) |
-| `~/bin/claude-glm` | `claude-worker` | 서버·모델·토큰이 `~/.config/claude-worker/env` 로 이동 |
-| `~/.config/glm/env` (`GLM_TOKEN`) | `LLM_API_KEY` | |
-| `~/.claude/prompts/glm-worker.md` | `~/.config/claude-worker/worker.md` | 템플릿에서 생성. DRL 하드코딩 → `COMPUTE_HOST/COMPUTE_DESC` |
-| `drl-info/sync/run/submit/fetch` | `remote-info/sync/run/submit/fetch` | 호스트 `DRL`, 경로 `/home/jyl/claude-work` → env 의 `COMPUTE_HOST`, `COMPUTE_WORK_DIR` |
-| `Ask @glm-worker to …` | `Ask @llm-worker to …` | `WORKER_NAME` 으로 바꿀 수 있다. 기존 이름을 유지하려면 `WORKER_NAME=glm-worker` |
-| `agents/SUBAGENT_*_GLM.md` | `agents/ROLE_*.md` | 프로젝트 파일. 내용은 그대로 두고 참조 경로만 바꾸면 된다 |
+정식 프로젝트 이름은 Local Worker Kit이며 현재 저장소 URL은 claude-local-worker-kit이다.
+DeepSeek 버전은 같은 소스의 호환 배포본으로 유지하며 서버/모델 때문에 별도 구현을 관리하지 않는다.
 
-연구실 LLM 서버(1.233.219.134, llama.cpp) 값으로 설치하려면:
+| 이전 명령 | 통합 명령 |
+|---|---|
+| claude-main / deepseek-main | claude-main |
+| claude-worker / deepseek-worker | llm-worker (claude-worker도 지원) |
+| worker-task / deepseek-task | worker-task 또는 llm-task |
+| project-init/update / deepseek-project-init/update | project-init/update |
+| llm-probe / deepseek-probe | llm-probe |
+| deepseek-doctor | worker-doctor |
+| claude-duo / deepseek-duo | claude-duo; 수동 메시징은 --manual |
+
+새 기능은 codex-main/duo, 서버·모델 레지스트리(llm-backend), 소유 풀과 headless/panes 모드다.
+기존 DEEPSEEK_*/CLAUDE_* 환경변수는 LLM_*의 호환 입력으로 읽는다. 명시적 LLM_*가 우선한다.
+WORKER_TASK_HOME도 지원한다. 새 설정/상태는 ~/.config/local-worker와 ~/.local/state/local-worker에 둔다.
+기존 폴더를 자동 이동/삭제하지 않으며, 기존 설정만 있는 환경은 그 경로를 읽는다.
+기존 DeepSeek 설치 경로가 있으면 --update는 그 실행 파일 경로를 사용할 수 있다. 설치 출력의 실제 경로를 확인한다.
+
+## 설정을 한곳으로 모으기
+
+새 통합 설정 경로를 명시하고 두 설정을 가져온다. 원본 키와 파일은 바꾸지 않는다.
 
 ```bash
-LLM_BASE_URL=http://1.233.219.134:4000 LLM_API_KEY=none LLM_MODEL=qwen3.8-flash-next \
-WORKER_NAME=glm-worker COMPUTE_HOST=DRL COMPUTE_DESC="RTX A6000 48GB x2, 503G RAM" \
-  ./install.sh --non-interactive
+LLM_WORKER_CONF_DIR="$HOME/.config/local-worker" ./install.sh --non-interactive \
+  --import-config "$HOME/.config/claude-worker" \
+  --import-config "$HOME/.config/deepseek-worker" --setup-path
+. "$HOME/.config/local-worker/shell.sh"
+llm-backend list
 ```
 
-(`WORKER_NAME=glm-worker` 는 기존 프로젝트 문서의 `Ask @glm-worker` 를 그대로 쓰기 위한 것이다. 새 프로젝트면 생략한다.)
-서버나 모델을 바꿀 때는 `~/.config/claude-worker/env`의 `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`과
-`LLM_CONTEXT_WINDOW`를 확인한 뒤 `./install.sh --render && llm-probe`로 프롬프트 재생성과 연결 확인을 한다.
-`--render`는 컨텍스트 크기를 자동 조회하지 않는다. API 키가 있는 설정 파일 전체를 보고서·대화에 붙여 넣지 않는다.
+원본 서버 연결은 imported-* 서버로, 모델은 해당 서버의 모델 목록으로 합친다.
+프로필 이름은 claude / claude-impl / deepseek / deepseek-qwen처럼 원본 폴더 이름을 접두사로 붙인다.
+같은 연결의 여러 모델은 서버 하나에 넣는다. 기존 gateway.env가 있는 설정은 그 연결을 우선하며
+이전 프로필에 남은 오래된 URL·키를 다시 활성화하지 않는다. 대상 이름이 이미 있으면 다른 내용을 덮어쓰지 않는다.
+키가 들어 있는 등록 파일은 private JSON(0600)이며 Git에 넣지 않는다.
 
-코드 수정 위임은 [관리 모드](MANAGED_TASKS.md)를 사용할 수 있다. 기존 프로필과 대화형 메시징은 그대로 유지되며,
-관리 태스크는 기록된 기준 커밋에서 새 worktree로 실행한다. 원본의 미커밋 변경은 자동으로 전달되지 않는다.
+이전 Claude 설정에 gateway.env가 없으면 --update에서 프로필별 연결을 등록해 보존한다.
+이전 DeepSeek의 알려진 133.186.146.224:8081 주소는 기존 마이그레이션 규칙에 따라 새 기본값으로 전환한다.
 
-기존 `~/bin/claude-glm`, `~/bin/drl-*` 는 지우지 않아도 충돌하지 않는다(이름이 다르다).
+## 기존 작업과 대화
+
+태스크 상태와 worktree는 그대로 남는다. 필요하면 worker-task --state-dir <이전 상태 폴더> status <id>로 조회한다.
+원본 명세를 수정하거나 이전 코드를 새 시도에 자동 복사하지 않는다. 재시도는 --retry로 새 시도를 만든다.
+기존 성공 산출물을 변경하면 검증은 무효다. 확인되지 않은 이전 실행은 자동 재실행하지 않는다.
+
+프로젝트 규칙은 project-update --check/--apply로 비교한다. 수정된 파일은 보존하고 incoming 제안을 병합한다.
+claude-duo -- --resume 또는 codex-duo -- resume --last로 대화를 재개하면 현재 풀의 ID와 지침을 사용한다.
+진행 중인 예전 프로세스에는 변경이 소급 적용되지 않는다.

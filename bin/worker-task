@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Opt-in task runner for the existing claude-worker CLI (stdlib only)."""
+"""Opt-in task runner for the existing llm-worker CLI (stdlib only)."""
 import argparse
 import codecs
 import contextlib
@@ -8,10 +8,13 @@ import fnmatch
 import hashlib
 import json
 import os
+from _kit_env import configure
+configure()
 from pathlib import Path
 import re
 import selectors
 import shlex
+import shutil
 import signal
 import stat
 import subprocess
@@ -19,9 +22,14 @@ import sys
 import time
 import uuid
 
+from _backends import choose as choose_backend, valid_name as backend_name
+from _worker_permissions import normalize_permissions, build_settings
+from _worker_compute import normalize as normalize_compute, checksum as compute_checksum
+
 
 ACTIVE = {"running", "verifying"}
-DEFAULT_PROTECTED = ["tests/", "config/", ".claude/", ".git"]
+DEFAULT_PROTECTED = ["tests/", "config/", ".claude/", ".git", ".task-inputs/"]
+ROLES = {"planner", "researcher", "implementer", "test-author", "runner", "analyst", "reviewer", "compute-runner"}
 
 
 def now():
@@ -154,15 +162,20 @@ def stop_group(who):
 def secrets_for(profile):
     values = [os.environ.get(k, "") for k in
               ("LLM_API_KEY", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")]
-    conf = Path(os.environ.get("CLAUDE_WORKER_CONF_DIR", Path.home() / ".config/claude-worker"))
-    path = conf / ("env" + ("." + profile if profile else ""))
-    if path.is_file():
-        for line in path.read_text().splitlines():
+    conf = Path(os.environ.get("LLM_WORKER_CONF_DIR", Path.home() / ".config/local-worker"))
+    paths = [conf / ("env" + ("." + profile if profile else "")), conf / "gateway.env"]
+    for path in paths:
+        for line in path.read_text().splitlines() if path.is_file() else []:
             if re.match(r"^(?:export\s+)?LLM_API_KEY=", line):
                 try:
                     values.extend(shlex.split(line.split("=", 1)[1], comments=True))
                 except ValueError:
                     pass
+    for path in (conf / "backends").glob("*.json"):
+        try:
+            key = json.loads(path.read_text()).get("key", "")
+            if isinstance(key,str): values.append(key)
+        except (ValueError,OSError): pass
     return [v for v in values if v and v not in {"none", "dummy", "k"}]
 
 
@@ -227,6 +240,14 @@ class Tasks:
                 state.update(state="failed", reason="artifact_error", verification_valid=False)
 
     def recover(self, folder, state):
+        if state["state"] in ACTIVE and state.get("phase") == "compute" and state.get("compute_result_path"):
+            try:
+                progress = read_json(Path(state["compute_result_path"]))
+                if progress.get("spec_digest") == state.get("compute_job_spec_digest"):
+                    state["compute_progress"] = progress
+                    state["compute_waiting_reason"] = "awaiting_resource_admission" if progress.get("state") == "waiting" else None
+            except (OSError, ValueError):
+                state["compute_waiting_reason"] = "executor_starting"
         if state["state"] in ACTIVE and not alive(state.get("runner")):
             ended = now()
             state.update(state="interrupted", reason="runner_lost", finished_at=ended,
@@ -238,7 +259,12 @@ class Tasks:
         if state["state"] == "succeeded":
             try:
                 valid = (digest(read_json(folder / "spec.json")) == state["spec_digest"] and
-                         digest(snapshot(Path(state["worktree"]))) == state["verified_digest"])
+                         digest(snapshot(Path(state["worktree"]))) == state["verified_digest"] and
+                         (not state.get("worker_settings_path") or
+                          digest(read_json(Path(state["worker_settings_path"]))) == state["worker_settings_digest"]))
+                if state.get("compute_result_path"):
+                    valid = valid and digest(read_json(Path(state["compute_result_path"]))) == state["compute_result_digest"]
+                    valid = valid and digest(read_json(Path(state["compute_result_path"]).with_name("compute.spec.json"))) == state["compute_job_spec_digest"]
             except (OSError, ValueError):
                 valid = False
             if not valid:
@@ -262,9 +288,39 @@ class Tasks:
             instructions += "\n" + (spec_path.parent / raw["task_file"]).read_text()
         if not isinstance(purpose, str) or not purpose.strip() or not isinstance(instructions, str) or not instructions.strip():
             raise ValueError("purpose and instructions (or task_file) are required")
-        profile = raw.get("profile", "")
+        if os.environ.get("LLM_POOL_DIR"):
+            from _worker_pool import route_spec
+            raw = route_spec(dict(raw,repository=str(repo)), self.root)
+        inference_backend = raw.get("backend")
+        if inference_backend is not None:
+            backend_name(inference_backend)
+        model = raw.get("model")
+        if model is not None and (not isinstance(model,str) or not model.strip() or any(ord(c)<32 for c in model)):
+            raise ValueError("invalid model ID")
+        worker_id = raw.get("worker_id")
+        if worker_id is not None and (not isinstance(worker_id,str) or not re.fullmatch(r"w-[a-f0-9]{12}",worker_id)):
+            raise ValueError("invalid worker ID")
+        profile = raw.get("profile", "qwen" if raw.get("role") == "compute-runner" else "")
         if not isinstance(profile, str) or (profile and not re.fullmatch(r"[A-Za-z0-9_-]+", profile)):
             raise ValueError("invalid profile")
+        role = raw.get("role", "implementer")
+        effort = raw.get("effort")  # Legacy input retained in the immutable spec; never forwarded.
+        if not isinstance(role, str) or role not in ROLES:
+            raise ValueError("invalid role")
+        if effort is not None and (not isinstance(effort, str) or effort not in {"low", "high", "max"}):
+            raise ValueError("invalid legacy effort")
+        max_turns = raw.get("max_turns", 120)
+        if type(max_turns) is not int or not 1 <= max_turns <= 1000:
+            raise ValueError("max_turns must be an integer in [1, 1000]")
+        compute_job = raw.get("compute_job")
+        if role == "compute-runner":
+            compute_job = normalize_compute(compute_job)
+            if compute_job["transport"] == "local" and compute_job["cwd"] != "@worktree":
+                cwd = Path(compute_job["cwd"]).resolve()
+                if cwd == repo or repo in cwd.parents:
+                    raise ValueError("local compute jobs must use @worktree or an explicit directory outside the original checkout")
+        elif compute_job is not None:
+            raise ValueError("compute_job requires role=compute-runner")
         allowed = rules(raw.get("allowed_paths", []), "allowed_paths")
         if not allowed:
             raise ValueError("allowed_paths must not be empty")
@@ -273,7 +329,7 @@ class Tasks:
         verify = raw.get("verify", [])
         if not isinstance(verify, list) or not verify or not all(isinstance(c, str) and c.strip() for c in verify):
             raise ValueError("verify must contain explicit shell commands")
-        limits = [raw.get("timeout", 1200), raw.get("verify_timeout", 120)]
+        limits = [raw.get("timeout", 1800), raw.get("verify_timeout", 300)]
         if not all(isinstance(x, (int, float)) and not isinstance(x, bool) and 0 < x <= 86400 for x in limits):
             raise ValueError("timeout and verify_timeout must be in (0, 86400] seconds")
         depends = raw.get("depends_on_uncommitted", False)
@@ -283,9 +339,48 @@ class Tasks:
         if backend != "local":
             raise ValueError("managed tasks currently support only compute_backend=local (current computer/WSL)")
         spec = dict(purpose=purpose, instructions=instructions, repository=str(repo), base_commit=base,
-                    profile=profile, references=refs, allowed_paths=allowed, protected_paths=protected,
+                    profile=profile, backend=inference_backend, model=model, worker_id=worker_id, role=role, effort=effort, references=refs, allowed_paths=allowed, protected_paths=protected,
                     verify=verify, timeout=limits[0], verify_timeout=limits[1], depends_on_uncommitted=depends,
-                    compute_backend=backend)
+                    compute_backend=backend, max_turns=max_turns, compute_job=compute_job, worker_permissions=normalize_permissions(raw, spec_path.parent))
+        inputs = raw.get("inputs", [])
+        if not isinstance(inputs, list):
+            raise ValueError("inputs must be a list of {task_id, paths}")
+        # Pin actual verified producer content, not its natural-language report.
+        spec["inputs"] = []
+        seen = set()
+        for item in inputs:
+            if not isinstance(item, dict):
+                raise ValueError("input must contain task_id and exact relative file paths")
+            source_id = item.get("task_id", "")
+            if not isinstance(source_id, str):
+                raise ValueError("input task_id must be a string")
+            if source_id in seen:
+                raise ValueError("duplicate input task")
+            seen.add(source_id)
+            source = self.get(source_id)
+            if source["state"] != "succeeded" or not source.get("verification_valid"):
+                raise ValueError("input task is not currently verified: " + source_id)
+            source_spec = read_json(self.path(source_id) / "spec.json")
+            if source_spec["repository"] != str(repo) or source_spec["base_commit"] != base:
+                raise ValueError("input must use the same repository and base commit")
+            paths = rules(item.get("paths", []), "input paths")
+            if not paths or len(paths) != len(set(paths)):
+                raise ValueError("input paths must be unique exact file paths")
+            changed = {c["path"] for c in source["changed_files"] if c["change"] != "deleted"}
+            tree = snapshot(Path(source["worktree"]))
+            if digest(tree) != source["verified_digest"]:
+                raise ValueError("input changed after verification")
+            files = {}
+            for path in paths:
+                if path not in changed or path not in tree or tree[path][0] != "file":
+                    raise ValueError("input must name a changed regular file: " + path)
+                # A symlink parent could point outside the producing worktree.
+                candidate = Path(source["worktree"]) / path
+                if candidate.resolve() != candidate:
+                    raise ValueError("symlink input refused")
+                files[path] = tree[path]
+            spec["inputs"].append(dict(task_id=source_id, attempt_id=source["attempt_id"],
+                                       verified_digest=source["verified_digest"], files=files))
         serialized = json.dumps(spec)
         if redact(serialized, secrets_for(profile)) != serialized:
             raise ValueError("task specification contains a configured API key; remove it")
@@ -299,11 +394,33 @@ class Tasks:
         atomic_json(folder / "state.json", dict(task_id=task, state="queued", reason=
                     "uncommitted_dependency" if has_dirty and depends else None,
                     created_at=now(), attempts=[], current_attempt=None, base_commit=base,
-                    profile=profile, original_dirty_at_submit=has_dirty,
+                    profile=profile, backend=inference_backend, model=model, worker_id=worker_id, role=role, effort=None, requested_effort=effort, effort_forwarded=False, inputs=spec["inputs"], original_dirty_at_submit=has_dirty,
                     uncommitted_changes_included=False, spec_digest=digest(spec)))
         if has_dirty:
             print("Original checkout is dirty. Only the recorded base commit is included; uncommitted changes are excluded.", file=sys.stderr)
         return task
+
+    def prepare_inputs(self, spec, wt):
+        """Copy pinned producer files without touching either producer or source checkout."""
+        if (wt / ".task-inputs").exists() or (wt / ".task-inputs").is_symlink():
+            raise ValueError("reserved .task-inputs path exists in base commit")
+        for item in spec.get("inputs", []):
+            source = self.get(item["task_id"])
+            if (source["state"] != "succeeded" or not source.get("verification_valid") or
+                source["attempt_id"] != item["attempt_id"] or source["verified_digest"] != item["verified_digest"]):
+                raise ValueError("input no longer matches pinned verified attempt: " + item["task_id"])
+            source_root = Path(source["worktree"])
+            destination = wt / ".task-inputs" / item["task_id"]
+            for path in item["files"]:
+                src = source_root / path
+                if src.resolve() != src or not src.is_file():
+                    raise ValueError("input file missing or symlink")
+                target = destination / path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(src, target)
+                target.chmod(item["files"][path][1])
+            if snapshot(destination) != item["files"] or digest(snapshot(source_root)) != item["verified_digest"]:
+                raise ValueError("input changed during transfer")
 
     def get(self, task):
         folder = self.path(task)
@@ -353,9 +470,10 @@ class Tasks:
             wt = output / "worktree"
             state = dict(task_id=task, attempt_id=attempt, current_attempt=attempt,
                          attempts=old["attempts"] + [attempt], state="running", reason=None,
-                         base_commit=spec["base_commit"], profile=spec["profile"], worktree=str(wt),
+                         base_commit=spec["base_commit"], profile=spec["profile"], backend=spec.get("backend"), model=spec.get("model"), worker_id=spec.get("worker_id"), worktree=str(wt),
                          compute_backend=spec.get("compute_backend", "local"),
-                         worker_name=f"task-{task[-12:]}-{attempt}",
+                         role=spec.get("role", "implementer"), effort=None, requested_effort=spec.get("effort"), effort_forwarded=False, max_turns=spec.get("max_turns", 120), inputs=spec.get("inputs", []),
+                         worker_name=f"llm-worker-{spec.get('worker_id') or task[-12:]}-{attempt}",
                          original_dirty_at_submit=old["original_dirty_at_submit"],
                          original_dirty_at_run=dirty(spec["repository"]), uncommitted_changes_included=False,
                          spec_digest=old["spec_digest"], runner=identity(os.getpid()), child=None,
@@ -368,6 +486,9 @@ class Tasks:
                          "verification_stderr": str(output / "verification.stderr.log")}, diff_path=str(output / "changes.diff"))
             self.save(folder, state)
 
+        policy = spec.get("worker_permissions", normalize_permissions({}, folder))
+        settings_path = output / "worker.settings.json"
+        settings_value = None
         secrets = secrets_for(spec["profile"])
         interrupted = []
         previous = {}
@@ -393,9 +514,18 @@ class Tasks:
             env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
             env["PYTHONDONTWRITEBYTECODE"] = "1"
             env["CLAUDE_PROJECT_DIR"] = str(wt)
-            env["CLAUDE_WORKER_PROFILE"] = spec["profile"]
-            env["CLAUDE_WORKER_NAME"] = state["worker_name"]
-            env["WORKER_TASK_MANAGED"] = "1"
+            env["LLM_WORKER_PROFILE"] = spec["profile"]
+            env["LLM_WORKER_BACKEND"] = state.get("backend") or spec.get("backend") or ""
+            env["LLM_WORKER_MODEL"] = state.get("model") or spec.get("model") or ""
+            env["LLM_WORKER_NAME"] = state["worker_name"]
+            env["LLM_WORKER_ROLE"] = spec.get("role", "implementer")
+            for name in ("LLM_WORKER_EFFORT", "LLM_EFFORT", "CLAUDE_CODE_EFFORT_LEVEL"):
+                env.pop(name, None)
+            env["LLM_TASK_MANAGED"] = "1"
+            env["DEEPSEEK_TASK_MANAGED"] = "1"  # Older project rules still recognize this marker.
+            env.pop("LLM_WORKER_SETTINGS", None)
+            if settings_value is not None:
+                env["LLM_WORKER_SETTINGS"] = str(settings_path)
             # This is a separate CLI session in its own worktree, not the parent
             # Claude session. Keep permissions/config; drop only session identity.
             for name in ("CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_CHILD_SESSION"):
@@ -456,10 +586,26 @@ class Tasks:
                 raise ValueError("descendant retained log pipes outside the managed process session")
             return process.returncode, timed_out
 
+        def settings_valid():
+            if settings_value is None:
+                return True
+            try:
+                return digest(read_json(settings_path)) == state["worker_settings_digest"]
+            except (OSError, ValueError):
+                return False
+
         def finish(status, reason):
             if status == "succeeded" and cancelled():
                 status, reason = ("interrupted", "runner_signal") if interrupted else ("cancelled", "cancelled_by_user")
                 state["verification_valid"] = False
+            if spec.get("compute_job") and status in {"cancelled", "interrupted"}:
+                state["compute_cleanup_confirmed"] = False
+                try:
+                    progress = read_json(output / "compute.result.json")
+                    state["compute_result"] = progress
+                    state["compute_cleanup_confirmed"] = bool(progress.get("remote_cleanup_confirmed"))
+                except (OSError, ValueError):
+                    pass
             # Publish the terminal state only after collecting artifacts in finally.
             # Until then another runner must still see this attempt as active.
             state.update(state=status, reason=reason, finished_at=now(), duration_seconds=now() - state["started_at"])
@@ -471,40 +617,107 @@ class Tasks:
             staged = git(wt, "ls-files", "--stage")
             if staged.startswith(b"160000 ") or b"\n160000 " in staged:
                 raise ValueError("managed mode does not support submodules yet")
+            self.prepare_inputs(spec, wt)
+            missing_reads = [p for p in policy["read_paths"] if not Path(p).exists()]
+            if missing_reads:
+                raise ValueError("external read path is not available: " + ", ".join(missing_reads))
             baseline = snapshot(wt)
             atomic_json(output / "baseline.json", baseline)
             missing = [p for p in spec["references"] if not any(matches(f, [p]) for f in baseline)]
             if missing:
                 raise ValueError("reference absent from base commit (possibly uncommitted): " + ", ".join(missing))
-            prompt = (f"Managed task {task}, attempt {attempt}. Purpose: {spec['purpose']}\n"
-                      "Compute backend: local (this computer, often WSL). Run the assigned implementation and tests locally. "
-                      "The LLM inference server is not the compute backend. Do not use SSH or remote-* for this task.\n"
+            compute_summary = None
+            if spec.get("compute_job"):
+                job = dict(spec["compute_job"])
+                if job["cwd"] == "@worktree":
+                    if job["transport"] != "local":
+                        raise ValueError("@worktree only applies to local compute jobs")
+                    job["cwd"] = str(wt)
+                job_path, result_path = output / "compute.spec.json", output / "compute.result.json"
+                atomic_json(job_path, job)
+                update(phase="compute", compute_result_path=str(result_path), compute_job_spec_digest=digest(job))
+                helper = str(Path(__file__).resolve().with_name("worker-compute-job"))
+                budget = job["wait_timeout"] + job["timeout"] + len(job["verify"]) * job["verify_timeout"] + 60
+                rc, timed_out = execute([helper, str(job_path), "--result", str(result_path)], budget,
+                                        output / "compute.stdout.log", output / "compute.stderr.log")
+                if cancelled():
+                    return finish("interrupted" if interrupted else "cancelled", "runner_signal" if interrupted else "cancelled_by_user")
+                compute_summary = read_json(result_path) if result_path.is_file() else {"state":"interrupted", "reason":"missing_compute_result"}
+                if digest(read_json(job_path)) != digest(job) or compute_summary.get("spec_digest") != compute_checksum(job):
+                    raise ValueError("compute specification/result identity changed")
+                update(compute_job_exit_code=rc, compute_job_timed_out=timed_out, compute_result=compute_summary,
+                       compute_result_digest=digest(compute_summary), phase="worker")
+                compute_reads = [str(result_path)]
+                if job["transport"] == "local" and compute_summary.get("run_id"):
+                    # Only this run's completed local logs; SSH paths belong to the remote host.
+                    log_root = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "local-worker/compute" / compute_summary["run_id"]
+                    for key, name in (("stdout_path", "stdout.log"), ("stderr_path", "stderr.log"),
+                                      ("verification_log", "verification.log"), ("remote_result_path", "result.json")):
+                        path = log_root / name
+                        if compute_summary.get(key) == str(path) and path.is_file() and path.resolve() == path:
+                            compute_reads.append(str(path))
+                policy = dict(policy, read_paths=policy["read_paths"] + compute_reads)
+            settings_value = build_settings(policy, wt, spec["repository"], spec["protected_paths"])
+            if settings_value is not None:
+                atomic_json(settings_path, settings_value)
+            update(permission_profile=policy["profile"],
+                   worker_settings_path=str(settings_path) if settings_value is not None else None,
+                   worker_settings_digest=digest(settings_value) if settings_value is not None else None,
+                   permission_denial_count=0, permission_denied_tools=[])
+            prompt = (f"Managed task {task}, attempt {attempt}. Role: {spec.get('role', 'implementer')}. Purpose: {spec['purpose']}\n"
+                      "Code workspace: local (this computer, often WSL). Verify the assigned worktree locally. "
+                      "Workspace permissions allow SSH, scp, sftp, rsync and remote commands for the task's named hosts and paths; "
+                      "other permission profiles follow their explicit grants. "
+                      "Use existing SSH authentication and host-key verification. Never infer a compute host from the LLM URL. "
+                      "Use the trusted compute executor for queued/GPU jobs; do not relaunch a supplied compute result.\n"
                       f"Your assigned worktree is {wt}, detached at {spec['base_commit']}. "
                       "Stay in this worktree. Do not checkout, add, commit, merge or remove worktrees. "
                       "Leave edits for external verification. Your report is not the success decision.\n"
                       f"Read references: {json.dumps(spec['references'])}\n"
+                      f"External read-only paths: {json.dumps(policy['read_paths'])}\n"
+                      f"External scratch paths: {json.dumps(policy['scratch_paths'])}\n"
+                      "Use the provided permissions to implement and test the task. Do not work around denied operations. "
+                      "Use scratch paths only for this task; do not delete preserved attempts or modify other checkouts.\n"
                       f"Allowed paths: {json.dumps(spec['allowed_paths'])}\n"
                       f"Protected paths: {json.dumps(spec['protected_paths'])}\n"
-                      f"Verification: {json.dumps(spec['verify'])}\n\n{spec['instructions']}")
-            worker = str(Path(__file__).resolve().with_name("claude-worker"))
+                      f"Immutable inputs under .task-inputs/<task_id>/: {json.dumps(spec.get('inputs', []))}\n"
+                      f"Verification: {json.dumps(spec['verify'])}\n"
+                      f"Trusted compute result (already executed; do not relaunch): {json.dumps(compute_summary)}\n\n{spec['instructions']}")
+            selected_backend, selected_server, selected_model = choose_backend(spec["profile"], spec.get("backend"), spec.get("model"))
+            update(backend=selected_backend, model=selected_model["id"], backend_url=selected_server["url"], context_window=selected_model["context"])
+            worker = str(Path(__file__).resolve().with_name("llm-worker"))
             command = [worker] + (["-P", spec["profile"]] if spec["profile"] else [])
-            command += ["-p", prompt, "--output-format", "json", "--max-turns", "60"]
+            command += ["-p", prompt, "--output-format", "json", "--max-turns", str(spec.get("max_turns", 120))]
             rc, timed_out = execute(command, spec["timeout"], output / "worker.stdout.log", output / "worker.stderr.log")
             update(worker_exit_code=rc, worker_timed_out=timed_out)
             if cancelled():
                 return finish("interrupted" if interrupted else "cancelled", "runner_signal" if interrupted else "cancelled_by_user")
             if timed_out:
                 return finish("failed", "worker_timeout")
-            if rc:
-                return finish("failed", "worker_exit_nonzero")
             try:
                 response = read_json(output / "worker.stdout.log")
                 if not isinstance(response, dict) or not isinstance(response.get("is_error"), bool):
                     raise ValueError("missing result envelope")
             except (ValueError, OSError):
-                return finish("failed", "invalid_worker_result")
+                return finish("failed", "worker_exit_nonzero" if rc else "invalid_worker_result")
+            denials = response.get("permission_denials", [])
+            if isinstance(denials, list) and denials:
+                tools = sorted({d.get("tool_name", "unknown") for d in denials if isinstance(d, dict) and isinstance(d.get("tool_name", "unknown"), str)})
+                update(permission_denial_count=len(denials), permission_denied_tools=tools)
+                return finish("failed", "permission_denied")
+            if response.get("subtype") == "error_max_turns":
+                return finish("failed", "worker_turn_limit")
+            if rc:
+                return finish("failed", "worker_exit_nonzero")
+            if not settings_valid():
+                return finish("failed", "permission_settings_changed")
             if response["is_error"] or str(response.get("subtype", "")).startswith("error"):
                 return finish("failed", "model_error")
+            if compute_summary is not None:
+                if digest(read_json(result_path)) != state["compute_result_digest"] or digest(read_json(job_path)) != state["compute_job_spec_digest"]:
+                    return finish("failed", "compute_evidence_changed")
+                if state["compute_job_exit_code"] or state["compute_job_timed_out"] or compute_summary.get("state") != "succeeded":
+                    return finish("failed", compute_summary.get("reason") or "compute_job_failed")
             update(state="verifying")
             before = snapshot(wt)
             changed = changes(baseline, before)
@@ -527,6 +740,10 @@ class Tasks:
                 if rc:
                     return finish("failed", "verification_exit_nonzero")
             after = snapshot(wt)
+            if compute_summary is not None and (digest(read_json(result_path)) != state["compute_result_digest"] or digest(read_json(job_path)) != state["compute_job_spec_digest"]):
+                return finish("failed", "compute_evidence_changed")
+            if not settings_valid():
+                return finish("failed", "permission_settings_changed")
             if before != after:
                 return finish("failed", "changed_during_verification")
             update(verified_digest=digest(after), verification_valid=True)
@@ -547,8 +764,11 @@ class Tasks:
 def main():
     os.umask(0o077)
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--state-dir", type=Path, default=Path(os.environ.get("WORKER_TASK_HOME",
-                        str(Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state"))) / "claude-worker/tasks"))))
+    parser.add_argument("--state-dir", type=Path, default=Path(os.environ.get("LLM_TASK_HOME",
+                        str(Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state"))) / "local-worker/tasks"))))
+    if "LLM_TASK_HOME" not in os.environ:
+        old_store=Path(os.environ.get("XDG_STATE_HOME",str(Path.home()/".local/state")))/"claude-worker/tasks"
+        if old_store.is_dir() and not parser.get_default("state_dir").exists():parser.set_defaults(state_dir=old_store)
     sub = parser.add_subparsers(dest="command", required=True)
     submit = sub.add_parser("submit", help="register an immutable JSON task spec; print its ID")
     submit.add_argument("spec", type=Path)
@@ -558,6 +778,8 @@ def main():
     run.add_argument("-P", "--profile", help="assert the profile recorded at submission")
     for name in ("status", "result", "cancel"):
         sub.add_parser(name).add_argument("task")
+    wait = sub.add_parser("wait", help="wait without additional model turns")
+    wait.add_argument("task");wait.add_argument("--timeout",type=float,default=600)
     args = parser.parse_args()
     try:
         tasks = Tasks(args.state_dir)
@@ -568,10 +790,17 @@ def main():
             result = tasks.run(args.task, args.retry, args.profile)
         elif args.command == "cancel":
             result = tasks.cancel(args.task)
+        elif args.command == "wait":
+            if not 0 < args.timeout <= 86400:raise ValueError("wait timeout must be in (0, 86400]")
+            deadline=time.monotonic()+args.timeout
+            while True:
+                result=tasks.get(args.task)
+                if result["state"] not in {"queued","running","verifying"} or time.monotonic()>=deadline:break
+                time.sleep(.2)
         else:
             result = tasks.get(args.task)
         print(json.dumps(result, ensure_ascii=False, indent=2))
-        return int(args.command == "run" and result["state"] != "succeeded")
+        return int(args.command in {"run","wait"} and result["state"] != "succeeded")
     except (ValueError, OSError, KeyError) as exc:
         print("worker-task: " + str(exc), file=sys.stderr)
         return 2
