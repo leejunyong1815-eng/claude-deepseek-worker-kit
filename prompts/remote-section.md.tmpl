@@ -17,7 +17,7 @@ For normal remote commands use:
 
     remote-run "<command>"
 
-This synchronizes the current project to `${COMPUTE_WORK_DIR}/<project-name>`
+This synchronizes the current checkout to its path-hashed namespace under `${COMPUTE_WORK_DIR}`
 on the remote node, executes there, and downloads `outputs/`.
 
 For long-running jobs use:
@@ -32,8 +32,12 @@ Fetch completed results with `remote-fetch`; check active jobs with
 
 - Do not make the remote copy the authoritative source. Edit locally, then
   `remote-sync` / `remote-run`.
+- Each checkout/managed attempt has a separate namespace. Read the target printed
+  by remote-sync; never replace it with a guessed shared worktree directory.
+- Synchronization never deletes remote-only files, so stale remote files can remain.
+  Use the tracked Compute Job executor when scheduling, cancellation or revision evidence is required.
 - Do not occupy GPUs blindly. Select GPUs explicitly with CUDA_VISIBLE_DEVICES
   (or the project's GPU reservation tool if `CLAUDE.md` names one).
 - Do not kill other users' processes. Do not use sudo. Do not modify drivers,
   kernel modules, or global toolchains.
-- Do not delete anything outside `${COMPUTE_WORK_DIR}/<project-name>`.
+- Preserve unrelated remote files; do not delete another checkout's namespace.

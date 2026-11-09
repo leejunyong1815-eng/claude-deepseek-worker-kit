@@ -84,11 +84,13 @@ project-init .
 codex-duo --headless --backends lab
 # Claude 메인을 쓰는 경우
 claude-duo --headless --backends lab
+# 메인 세션 이름을 지정하는 경우
+claude-duo -n ozaki --backends lab
 ```
 
 대화에는 원하는 결과와 완료 조건을 말하면 됩니다. 사용자가 워커 이름이나 관리 CLI를 지정할 필요는 없습니다.
 메인이 태스크를 등록하면 풀이 실행하고, `worker-task wait`로 기다린 뒤 검증 결과와 변경을 검토합니다.
-기본 메인은 Codex의 기존 계정/모델 설정 또는 Claude 계정의 Opus입니다. 네이티브 자식 에이전트 대신 같은 관리 실행기를 사용합니다.
+기본 메인은 Codex의 기존 계정/모델 설정 또는 Claude 계정의 Opus입니다. 일반 위임은 같은 관리 실행기를 사용하며, 네이티브 판단·리뷰도 기본으로 선택할 수 있습니다.
 
 ### 창 없이 실행하거나 창으로 확인
 
@@ -109,6 +111,9 @@ codex-duo 연구실 데모
 워커 이름에 접미사·공백·한글이 있어도 동작합니다. 이름의 접두사로 소속을 추측하지 않습니다.
 사용자 UID·pool ID·worker ID로 소속을 기록하고 화면과 `llm-worker list`에 `owned`를 표시합니다.
 다른 풀의 워커 ID로 태스크를 배정하면 거절합니다.
+`claude-main -n 이름`, `claude-duo -n 이름`, `llm-worker -n 이름`은 지정한 표시 이름을 그대로 씁니다.
+이름을 생략하면 메인·워커의 기본 이름을 구분하며, 수동 duo도 자신이 띄운 워커의 정확한 이름 목록을 메인에 전달합니다.
+`llm-worker-...` 뒤에 붙는 단어를 모델이나 소속 판정에 사용하지 않습니다.
 
 `--models 모델1,모델2`, `-P 프로필1,프로필2`는 워커별 선택을 고정할 때 사용합니다.
 `--` 뒤 인자는 메인 CLI로 전달합니다. 예: `claude-duo --headless -- --resume`, `codex-duo -- resume --last`.
@@ -121,6 +126,33 @@ codex-duo 연구실 데모
 | `claude-duo --manual` | 기존 수동 세션 간 메시징 | 직접 띄운 대화형 워커; 자동 격리/완료 검증 없음 |
 
 수동 모드는 [대화형 문서](docs/INTERACTIVE.md), 관리 CLI는 [태스크 문서](docs/MANAGED_TASKS.md)를 참고하세요.
+시작 전에 서버 호환성까지 검사하려면 `claude-duo --probe` 또는 `codex-duo --probe`를 사용합니다.
+선택 가능한 서버·모델에 실제 요청을 보내며, 실패하면 메인과 워커를 시작하지 않습니다. 기본 실행은 이 검사를 생략합니다.
+
+### 고난도 판단·EGM 리뷰에 네이티브 에이전트 허용
+
+```bash
+claude-duo -n ozaki --backends lab
+codex-duo --backends lab
+```
+
+기본값은 `--native-agents selective`입니다. 메인이 EGM 리뷰, 아키텍처 선택, 엄밀한 추론,
+복잡한 원인 분석에 네이티브 에이전트를 선택할 수 있습니다. 호출 전에 이유·범위·기대 결과를 짧게 밝히며,
+일반 조사·구현·테스트는 계속 등록된 LLM 워커에 맡깁니다. 사용자가 매번 워커를 지정할 필요는 없습니다.
+이 선택 기준은 모델 지침이며 호출 목적을 코드가 강제로 분류하는 기능은 아닙니다.
+
+네이티브는 소스를 읽고 판단·리뷰 결과를 돌려주는 용도입니다. 원본이나 관리 worktree를 직접 편집하지 않도록 지시합니다.
+메인의 계정·모델 설정을 사용하고 관리 풀의 동시 실행 한도·task 결과·취소에는 포함되지 않습니다.
+기존 권한·샌드박스는 유지합니다. 상세 범위는 [네이티브 위임](docs/NATIVE_AGENTS.md)을 참고하세요.
+
+`claude-main`, `codex-main`, `claude-duo --manual`도 기본 selective입니다. 네이티브를 끄려면 `--native-agents off`를 지정합니다.
+
+```bash
+claude-duo -- --resume
+codex-duo -- resume --last
+# 관리 워커만 사용할 세션
+claude-duo --native-agents off
+```
 
 ## 작업 범위와 권한
 
@@ -137,6 +169,7 @@ Qwen 등 compute-runner 모델은 고정된 Compute Job의 운영과 로그 조�
 성공 후 코드가 바뀌면 검증도 무효가 됩니다. 실패·취소·중단 결과는 보존하며 자동 stash·commit·merge·push·삭제는 하지 않습니다.
 worktree와 Claude 권한 규칙은 보안 샌드박스가 아닙니다. Bash는 현재 사용자 권한으로 실행됩니다.
 자세한 경로·외부 데이터·기존 SSH deny 처리는 [권한 문서](docs/WORKER_PERMISSIONS.md)를 참고하세요.
+기존 `remote-*` 전송 명령의 SSH 설정·작업별 원격 경로는 [원격 도우미 문서](docs/REMOTE_HELPERS.md)에 있습니다.
 
 ## 업데이트와 호환 명령
 
@@ -152,6 +185,61 @@ API 키·등록 서버·모델·프로필·태스크 결과를 보존합니다. 
 `claude-main`, `claude-worker`, `worker-task`, `project-init/update`와 기존 `deepseek-*`는 계속 사용할 수 있습니다.
 모두 같은 실행기를 사용합니다. 기존 상태 폴더는 옮기거나 삭제하지 않으며 `--state-dir`로 조회할 수 있습니다.
 [업데이트 상세](docs/UPDATING.md) · [통합 이력](UPSTREAM.md).
+
+## EGM 설치와 설계 리뷰
+
+[Elephant Goldfish Model(EGM)](https://github.com/google/elephant-goldfish-model)은 설계 문서 작성·리뷰용 플러그인입니다.
+추론 서버나 모델이 아니므로 `llm-backend`에 등록하지 않습니다. Claude Code는 EGM의 [리뷰어 격리 기능](https://github.com/google/elephant-goldfish-model/blob/main/docs/claude.md)에 필요한 **2.1.271 이상**을 사용합니다.
+아래 명령은 사용할 CLI에 맞게 WSL 안에서 실행합니다. 플러그인 전체가 필요하며 `skills/`만 복사하면 참고 자료가 빠집니다.
+Google 저장소를 플러그인 소스로 등록해 설치하는 방식이므로 이 절차에는 별도 clone이나 pip 설치가 필요하지 않습니다.
+
+```bash
+# Claude Code
+claude plugin marketplace add google/elephant-goldfish-model
+claude plugin install egm@egm --scope user
+claude plugin enable egm@egm
+```
+
+```bash
+# Codex CLI
+codex plugin marketplace add google/elephant-goldfish-model
+codex plugin add egm@egm
+```
+
+소스를 직접 받아 설치하려면 위 GitHub 등록 대신 아래 로컬 경로 등록을 사용합니다. 두 방법 중 하나만 선택합니다.
+이미 clone한 경우에는 기존 경로를 사용합니다.
+
+```bash
+mkdir -p "$HOME/src"
+git clone https://github.com/google/elephant-goldfish-model.git "$HOME/src/elephant-goldfish-model"
+# Claude Code
+claude plugin marketplace add "$HOME/src/elephant-goldfish-model"
+claude plugin install egm@egm --scope user
+claude plugin enable egm@egm
+# Codex CLI를 쓰는 경우: 위 Claude 명령 대신 실행
+# codex plugin marketplace add "$HOME/src/elephant-goldfish-model"
+# codex plugin add egm@egm
+```
+
+설치 후 새 `claude-duo` 또는 `codex-duo` 세션을 시작합니다. 기본 selective에서 EGM의 네이티브 리뷰어를 호출할 수 있습니다.
+`--native-agents off`를 지정한 세션에서는 리뷰어가 차단됩니다. 프로젝트 지침도 `project-update --check` / `--apply`로 갱신합니다.
+네이티브 호출을 허용하는 경로를 추가했으며 실제 EGM 전체 리뷰 흐름은 아직 검증하지 않았습니다.
+
+관리 풀과 분리한 설계 세션이 필요하면 일반 CLI도 사용할 수 있습니다.
+
+```bash
+mkdir -p "$HOME/egm-design"
+cd "$HOME/egm-design"
+claude -n egm-design
+# Codex를 쓸 경우 위 명령 대신 실행
+# codex -c agents.enabled=true -c features.multi_agent=true
+```
+
+Claude에서는 `/egm:egm-brainstorm`, `/egm:egm-draft`, `/egm:egm-review`를 사용합니다.
+Codex에서는 설치된 EGM 스킬을 선택합니다. 검토할 저장소·문서 경로는 프롬프트에 지정하고 소스는 읽기 전용으로 참고하게 합니다.
+일반 CLI의 모델·계정 설정을 사용하며, Goldfish 리뷰가 DeepSeek나 관리 풀로 자동 배정되지는 않습니다.
+설치 확인, 입력 프롬프트, 권한·작업 공간·토큰 비용의 차이는 [EGM 호환성 검토](docs/EGM.md)에 정리했습니다.
+이 키트의 설치·업데이트 명령은 EGM을 설치하거나 갱신하지 않습니다.
 
 ## 검증과 제한
 
@@ -169,3 +257,5 @@ python3 -B demo/rehearse.py
 과거 서버 측정은 [서버 기록](docs/LAB_SERVER.md)에 날짜별로 남깁니다.
 
 최신 통합 검증: [오프라인·tmux·실제 워커 기록](docs/validation/unified-kit.json).
+후속 수정 검증: [원격 동기화·세션 이름·수동 권한 회귀 검사](docs/validation/handoff-fixes.json).
+선택적 네이티브 검증: [모드 전환·관리 위임·CLI 설정 검사](docs/validation/native-agents.json).

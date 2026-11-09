@@ -91,7 +91,10 @@ apply가 출력한 개별 백업 폴더는 다음과 같다.
 
 `claude-main`은 기본 모델 Opus와 `--system-prompt-snapshot off`를 지정한다. CLI 2.1.257 이상이 필요하다.
 기존 메인을 종료하고 `claude-main --resume`으로 재개하면 최신 런처 지침을 다시 적용하며,
-Agent/Task/Workflow/TeamCreate/Skill 도구를 제외한다. fork형 Skill도 막기 위해 Skill 전체를 제외한다.
+기본 selective는 EGM·고난도 판단용 Agent/Task/Skill을 허용한다. `claude-main --resume` 또는 duo로 재개하면 적용된다.
+차단을 유지하려면 `--native-agents off`를 지정한다. Workflow/TeamCreate는 계속 제한한다.
+Codex도 `codex-duo -- resume --last`로 재개한다. 일반 구현·테스트는 관리 워커에 남긴다.
+[선택적 네이티브 위임](NATIVE_AGENTS.md)의 결과·권한 차이를 확인한다.
 추가 컨텍스트는 `--append-system-prompt`로 전달할 수 있고 필수 위임 지침과 합쳐진다.
 이 옵션으로 데모 지침을 넣어도 기본 정책이 사라지지 않는다. 다른 claude 런처에는 적용되지 않는다.
 프로젝트별 문서 재독은 여전히 필요하다. [공식 resume 옵션](https://code.claude.com/docs/en/cli-reference#system-prompt-flags-in-resumed-conversations).

@@ -234,14 +234,35 @@ class Pools(unittest.TestCase):
             capture = json.loads(Path(self.env['MAIN_CAPTURE']).read_text())
             self.assertEqual(capture['states'], ['succeeded', 'succeeded'])
             self.assertEqual(capture['pool']['label'], '내 풀 ;$(touch INJECTED)')
+            self.assertEqual(capture['pool']['native_agents'], 'selective')
             args = capture['args']
             if kind == 'codex':
-                self.assertIn('features.multi_agent=false', args)
+                self.assertIn('features.multi_agent=true', args)
+                self.assertIn('agents.enabled=true', args)
                 self.assertTrue(any((x.startswith('developer_instructions=') and 'worker-task wait' in x for x in args)))
                 self.assertIn('--add-dir', args)
             else:
                 self.assertIn('--disallowedTools', args)
+                denied = args[args.index('--disallowedTools') + 1:args.index('--system-prompt-snapshot')]
+                self.assertNotIn('Agent', denied)
             self.assertFalse((self.repo / 'INJECTED').exists())
+            self.assertEqual(self.call('git', 'status', '--porcelain', cwd=self.repo).stdout, '')
+
+    def test_explicit_off_keeps_actual_managed_delegation_in_both_mains(self):
+        self.main_driver()
+        for kind in ('codex', 'claude'):
+            options = ['--native-agents', 'off'] if kind == 'claude' else ['--', '--native-agents', 'off']
+            self.call(KIT / ('bin/' + kind + '-duo'), '-w', '2', *options, cwd=self.repo)
+            capture = json.loads(Path(self.env['MAIN_CAPTURE']).read_text())
+            self.assertEqual(capture['states'], ['succeeded', 'succeeded'])
+            self.assertEqual(capture['pool']['native_agents'], 'off')
+            args = capture['args']
+            if kind == 'codex':
+                self.assertIn('agents.enabled=false', args)
+                self.assertIn('features.multi_agent=false', args)
+            else:
+                denied = args[args.index('--disallowedTools') + 1:args.index('--system-prompt-snapshot')]
+                self.assertIn('Agent', denied)
             self.assertEqual(self.call('git', 'status', '--porcelain', cwd=self.repo).stdout, '')
 
     def test_pane_commands_quote_paths_and_treat_labels_as_data(self):
@@ -255,5 +276,46 @@ class Pools(unittest.TestCase):
         self.assertEqual(sum((x[0] == 'split-window' for x in rows)), 2)
         self.assertTrue(any((x[0] == 'select-pane' and 'x;$(touch PWN)' in x[-1] for x in rows)))
         self.assertFalse((self.repo / 'PWN').exists())
+
+    def test_explicit_preflight_checks_selectable_models_and_keeps_named_main(self):
+        from _duo import launch
+        self.main_driver()
+        self.call(KIT / 'install.sh', '--non-interactive', '--profile', 'impl', '--prefix', self.root / 'installed')
+        probes = []
+        original = subprocess.run
+
+        def run(command, **kwargs):
+            if Path(command[0]).name == 'llm-probe':
+                probes.append(command)
+                self.assertFalse((self.root / 'called').exists(), 'probe must precede workers')
+                return subprocess.CompletedProcess(command, 0)
+            return original(command, **kwargs)
+
+        with patch.dict(os.environ, self.env, clear=True), patch('_duo.subprocess.run', side_effect=run):
+            self.assertEqual(launch('claude', ['-C', str(self.repo), '-w', '2', '-P', 'impl', '-n', 'named-main', '--probe']), 0)
+        models = [x[x.index('--model') + 1] for x in probes]
+        self.assertEqual(set(models), {'mock-default', 'qwen3.8-flash-next'})
+        self.assertEqual(len(models), len(set(models)))
+        capture = json.loads(Path(self.env['MAIN_CAPTURE']).read_text())
+        args = capture['args']
+        self.assertEqual(args[args.index('--name') + 1], 'named-main')
+        self.assertEqual(capture['states'], ['succeeded', 'succeeded'])
+
+    def test_failed_preflight_never_starts_main_or_workers(self):
+        from _duo import launch
+        original = subprocess.run
+
+        def run(command, **kwargs):
+            if Path(command[0]).name == 'llm-probe':
+                raise subprocess.CalledProcessError(1, command)
+            return original(command, **kwargs)
+
+        with patch.dict(os.environ, self.env, clear=True), patch('_duo.subprocess.run', side_effect=run):
+            with self.assertRaises(subprocess.CalledProcessError):
+                launch('claude', ['-C', str(self.repo), '-w', '2', '--probe'])
+        self.assertFalse((self.root / 'called').exists())
+        folders = list((self.root / 'pools').glob('*'))
+        self.assertEqual(len(folders), 1)
+        self.assertTrue((folders[0] / 'STOP').exists())
 if __name__ == '__main__':
     unittest.main()

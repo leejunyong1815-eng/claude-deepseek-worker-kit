@@ -1,0 +1,42 @@
+{
+  "date": "2026-11-09",
+  "base_commit": "2836b27436b6a11413d4725ae2b185f7616d5893",
+  "scope": "Default-selective native delegation on top of existing handoff fixes and EGM installation documentation",
+  "option": "--native-agents off|selective",
+  "default": "selective",
+  "offline_tests": {
+    "command": "./tests/selftest.sh",
+    "core_passed": 145,
+    "demo_passed": 8,
+    "new_native_regressions": 10
+  },
+  "checked": [
+    "Default selective mode remains active regardless of inherited off status marker",
+    "Explicit off blocks native tools and keeps managed tasks working in both mains",
+    "Selective Claude mode removes only kit Agent/Task/Skill blocks and builtin disable markers",
+    "Caller tool denies remain in the native CLI arguments",
+    "Claude main does not inherit worker gateway credentials or model forcing",
+    "Codex sets agents.enabled and features.multi_agent consistently with the selected mode",
+    "Resume, account/model configuration and literal prompt arguments are preserved",
+    "Codex policy flags are inserted before the prompt delimiter",
+    "Both default-selective mains still execute two real managed task runners with mocked workers",
+    "Manual duo forwards native choice and separates modes in tmux identity",
+    "Workers do not inherit the main-only native status marker"
+  ],
+  "native_cli_checks": {
+    "claude": "off/selective launcher --help option parsing succeeded; no inference",
+    "codex": "default launcher features list reports multi_agent true; explicit off reports false; no inference"
+  },
+  "existing_uncommitted_work_preserved": true,
+  "persistent_user_settings_modified": false,
+  "real_model_calls": false,
+  "real_native_agent_spawn": false,
+  "real_egm_review": false,
+  "limits": [
+    "Task difficulty and native-vs-worker choice are model instructions, not an enforced classifier",
+    "Native agents are outside worker-task worktree, result, backend admission and cancellation management",
+    "Read-only source use is an instruction, not a separate native filesystem sandbox",
+    "Actual autonomous routing quality and token/speed effects were not measured",
+    "EGM plugin installation and full native review workflow remain unverified"
+  ]
+}

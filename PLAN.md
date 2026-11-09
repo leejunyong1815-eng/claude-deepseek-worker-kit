@@ -7,6 +7,9 @@
 - SSH/scp/sftp/rsync·일반 도구 권한, 기존 deny/ask 보존, 보호 경로와 파일 해시 검사.
 - 로컬/SSH Compute Job, GPU admission/locking, 명령·검증·원격 취소와 결과 기록.
 - 기존 설정 가져오기와 안전한 프로젝트 업데이트, 오프라인 테스트와 로컬 CPU 데모.
+- 기존 remote-*의 checkout별 원격 경로, 삭제 없는 동기화, 프로필·환경변수 우선순위와 ssh -F 전달.
+- 명시적 세션 이름과 수동 워커 이름 목록 전달, 수동 권한 선택, 선택적인 풀 시작 전 API 검사.
+- 기본 관리 위임을 유지하는 selective native Agent: EGM·고난도 판단에 기본 허용하며 명시적 off로 차단.
 
 남은 검증:
 - 사용자 Codex/Claude 메인 계정의 실제 추론과 다양한 모델의 작업 품질. 연구실 DeepSeek/Qwen 워커의 실제 풀 연동은 validation/unified-kit.json에서 확인한다.

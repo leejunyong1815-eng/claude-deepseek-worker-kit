@@ -1,0 +1,38 @@
+{
+  "date": "2026-11-07",
+  "base_commit": "2836b27436b6a11413d4725ae2b185f7616d5893",
+  "scope": "Uncommitted follow-up fixes for the pasted 37de483 worker-kit handoff",
+  "original_handoff_file_available": false,
+  "ozaki_repository_or_user_configuration_modified": false,
+  "offline_tests": {
+    "command": "./tests/selftest.sh",
+    "core_passed": 135,
+    "demo_passed": 8,
+    "new_regressions": 14,
+    "remote_helpers_rechecked_after_environment_only_compatibility_fix": 6,
+    "interactive_tests_rechecked_after_name_generation_cleanup": 6,
+    "preflight_tests_rechecked_after_profile_selection_review": 2
+  },
+  "checked": [
+    "Parallel worktrees use different remote paths and retain remote-only files",
+    "Worktree .git files and directories are excluded from transfers",
+    "Original staged, unstaged and untracked changes remain intact",
+    "Profile selection, runtime compute overrides and SSH -F reach transfers",
+    "Quoted remote paths, command exit codes, output retrieval and scoped tmux job names",
+    "Explicit session names agree with prompts and default names are distinct",
+    "Manual duo supplies its exact suffixed worker names to the main prompt",
+    "Manual workspace permissions are opt-in and do not modify persistent settings",
+    "Managed names and permissions cannot be overridden by manual options",
+    "Both hook modes report syntax errors without creating source logs",
+    "Opt-in API preflight covers selectable models and prevents startup on failure"
+  ],
+  "real_model_calls": false,
+  "real_ssh_connections": false,
+  "real_tmux_exercised_in_this_followup": false,
+  "limits": [
+    "Session-discovery and live cross-session message delivery were not exercised against a real Claude session",
+    "Manual sessions do not gain managed worktree isolation or external completion verification",
+    "Remote helpers preserve stale files and are not source snapshots or scheduled Compute Jobs",
+    "User and organization deny/ask rules remain authoritative"
+  ]
+}

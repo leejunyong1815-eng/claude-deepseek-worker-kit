@@ -2,7 +2,7 @@
 # agents/hooks/post-edit-check.sh — Claude Code PostToolUse 훅 (Edit|Write|MultiEdit 뒤에 실행).
 # 고친 파일을 바로 검사(문법 → lint → 테스트)하고, 실패하면 그 출력을 모델에게 돌려준다
 # (종료 코드 2 → stderr 가 모델의 다음 턴에 들어간다). 로컬 모델이 "테스트 돌리기"를 잊어도 훅은 잊지 않는다.
-# 설정: agents/hooks/check.conf (쉘 문법, 없으면 기본값). 결과 로그: agents/hooks/last-check.log
+# 설정: agents/hooks/check.conf (쉘 문법, 없으면 기본값). 실패는 stderr로 전달하며 파일 로그는 만들지 않는다.
 set -uo pipefail
 ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$(readlink -f "$0")")/../.." && pwd)}"
 IN="$(cat)"
@@ -22,10 +22,6 @@ TEST_CMD="${TEST_CMD:-none}"        # none(기본: 문법·lint 만) | auto(test
 TEST_ON="${TEST_ON:-\.py$}"         # 이 정규식에 맞는 파일을 고쳤을 때만 테스트를 돌린다
 TEST_TIMEOUT="${TEST_TIMEOUT:-120}" # 초. 넘기면 실패로 치지 않고 로그에만 남긴다
 TAIL_LINES="${TAIL_LINES:-40}"
-LOG="$ROOT/agents/hooks/last-check.log"
-# Managed mode already collects process logs outside the worktree. Do not create
-# an ignored but out-of-policy log alongside the source or persist raw secrets.
-[ "${LLM_TASK_MANAGED:-0}" = 1 ] && LOG=/dev/null
 
 fail=0; out=""
 case "$FILE" in
@@ -63,10 +59,9 @@ if [ $fail -eq 0 ] && [ "$TEST_CMD" != none ] && printf '%s' "$FILE" | grep -Eq 
   fi
 fi
 
-{ printf '%s  %s  ' "$(date +%FT%T)" "${FILE#"$ROOT"/}"
-  if [ $fail -ne 0 ]; then echo "FAIL"; printf '%s\n' "$out"
-  elif [ $timed_out -ne 0 ]; then echo "TIMEOUT (${TEST_TIMEOUT}s) — TEST_CMD 를 agents/hooks/check.conf 에서 더 빠른 부분 집합으로 바꾸세요"
-  else echo "ok"; fi; } >> "$LOG" 2>/dev/null
+if [ "$timed_out" -ne 0 ]; then
+  echo "post-edit-check: TIMEOUT (${TEST_TIMEOUT}s); set a faster TEST_CMD in agents/hooks/check.conf" >&2
+fi
 
 if [ $fail -ne 0 ]; then
   printf 'post-edit-check FAILED for %s\n%s\nFix this before moving on or reporting. Do not weaken or delete tests.\n' "${FILE#"$ROOT"/}" "$out" >&2

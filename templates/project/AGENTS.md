@@ -4,13 +4,20 @@
 자기 태스크를 다시 등록하거나 claude-main을 실행하지 않는다. 작업 공간·검증·보존 규칙은 동일하게 적용한다.
 
 메인은 Claude 계정의 Opus 또는 Codex 계정/설정의 모델을 사용한다. 사용자가 목표를 말하면 필요한 관리 워커를 직접 호출한다.
-메인의 native Agent/Task/Workflow/팀/fork Skill은 런처에서 차단된다. 워커 모델은 서버/모델 레지스트리로 선택한다.
+메인의 native Agent/Task/fork Skill은 기본 selective 모드에서 EGM·고난도 추론/설계 판단에 선택적으로 사용할 수 있다.
+`--native-agents off`면 차단한다. 현재 런처가 전달한 Native delegation mode를 따른다.
+일반 구현·테스트는 계속 등록된 LLM 워커에 맡긴다. Workflow/팀과 별도 메인 실행은 계속 제한한다.
+워커 모델은 서버/모델 레지스트리로 선택한다.
 조사·설계 초안·모듈 구현·테스트 초안·실행·분석·독립 리뷰를 등록된 LLM 관리 태스크에 먼저 배정한다.
 정책과 절차는 agents/ORCHESTRATOR.md, 역할은 agents/ROLE_*.md를 읽는다.
 
 - 관리 CLI: worker-task submit/run/status/result/cancel. role은 researcher, planner, implementer,
   test-author, runner, analyst, reviewer 중 선택한다. Compute Job은 Qwen의 compute-runner에 배정한다. effort는 명세에 지정하지 않는다.
 - 메인은 목표·계약·예산·권한·독립 수용 검사 신뢰성·최종 결정에 집중한다. 스켈레톤은 선택이다.
+- selective 세션에서는 EGM 리뷰·아키텍처 선택·복잡한 원인 분석·엄밀한 추론처럼 독립 판단이 필요한 작업을
+  native Agent에 직접 배정할 수 있다. 먼저 선택 이유·범위·기대 결과를 짧게 밝히고 읽기 전용으로 검토시킨다.
+  원본/관리 worktree 편집이나 Git 변경은 맡기지 않는다. native 결과를 worker-task 성공으로 표시하지 않는다.
+  권한·입력·서버 오류만으로 관리 실행을 native로 대체하지 않는다. 런처의 기본 모드는 selective다.
 - 여러 관련 파일과 완결된 모듈을 위임할 수 있다. 단순히 파일이 여러 개라는 이유로 메인이 구현하지 않는다.
 - 별도 task ID/worktree에서 독립 태스크를 병렬 실행할 수 있다. 실제 서버와 로컬 자원을 고려해 수를 정한다.
 - 앞선 산출물은 명세의 inputs로 검증된 시도와 정확한 파일 경로를 지정한다.

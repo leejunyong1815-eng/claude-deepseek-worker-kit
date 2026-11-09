@@ -1,4 +1,4 @@
-"""Permission policy for managed DeepSeek workers (Python stdlib only).
+"""Permission policy for managed and explicitly configured manual workers.
 
 A managed task runs ``claude -p`` with ``--settings <file>``.  In print mode
 nobody can approve a tool prompt, so every tool a worker needs must be granted
@@ -274,8 +274,8 @@ def _protected_rules(worktree, entry):
     return ["Edit(%s)" % base, "Edit(%s/**)" % base]
 
 
-def build_settings(policy, worktree, repository, protected_paths):
-    """Return the --settings document for a normalized policy (None for inherit)."""
+def build_settings(policy, worktree, repository, protected_paths, protect_repository=True):
+    """Render normalized rules; only explicit manual mode disables original protection."""
     if not isinstance(policy, dict):
         raise ValueError("permission policy must be a JSON object")
     profile = policy.get("profile")
@@ -320,7 +320,8 @@ def build_settings(policy, worktree, repository, protected_paths):
     allow += read_rules + edit_rules
 
     deny = list(deny_user)
-    deny += _literal_rules("Edit", repository, True)
+    if protect_repository:
+        deny += _literal_rules("Edit", repository, True)
     deny += _literal_rules("Edit", posixpath.join(worktree, ".git"), True)
     for name in DEFAULT_PROTECTED:
         deny += _literal_rules("Edit", posixpath.join(worktree, name.rstrip("/")), True)
@@ -336,3 +337,25 @@ def build_settings(policy, worktree, repository, protected_paths):
                             "allow": _dedupe(allow),
                             "ask": _dedupe(ask),
                             "deny": _dedupe(deny)}}
+
+
+if __name__ == "__main__":
+    # Explicit manual sessions can reuse the policy without editing project or
+    # user settings. They have no isolated original checkout to protect.
+    import argparse
+    parser = argparse.ArgumentParser(description="Render explicit manual worker permissions")
+    parser.add_argument("--profile", choices=PROFILES, required=True)
+    parser.add_argument("--permissions-file")
+    parser.add_argument("--read-path", action="append", default=[])
+    parser.add_argument("--scratch-path", action="append", default=[])
+    args = parser.parse_args()
+    raw = dict(permission_profile=args.profile, read_paths=args.read_path, scratch_paths=args.scratch_path)
+    if args.permissions_file:
+        raw["permissions_file"] = args.permissions_file
+    try:
+        root = Path.cwd().resolve()
+        policy = normalize_permissions(raw, root)
+        print(json.dumps(build_settings(policy, root, root, [], protect_repository=False) or
+                         {"crossSessionInbound": "accept"}))
+    except (OSError, ValueError) as exc:
+        parser.exit(2, "worker permissions: " + str(exc) + "\n")

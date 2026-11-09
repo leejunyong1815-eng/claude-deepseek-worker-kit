@@ -521,6 +521,7 @@ class Tasks:
             env["LLM_WORKER_ROLE"] = spec.get("role", "implementer")
             for name in ("LLM_WORKER_EFFORT", "LLM_EFFORT", "CLAUDE_CODE_EFFORT_LEVEL"):
                 env.pop(name, None)
+            env.pop("LLM_MAIN_NATIVE_AGENTS", None)
             env["LLM_TASK_MANAGED"] = "1"
             env["DEEPSEEK_TASK_MANAGED"] = "1"  # Older project rules still recognize this marker.
             env.pop("LLM_WORKER_SETTINGS", None)

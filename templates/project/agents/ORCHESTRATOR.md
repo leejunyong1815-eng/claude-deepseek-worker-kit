@@ -1,12 +1,17 @@
 # ORCHESTRATOR
 
 메인은 Claude/Codex 계정을 사용하고 워커는 등록된 서버/모델을 사용한다.
-메인의 native Agent/Task/Workflow/팀/Skill과 직접 claude 실행은 런처에서 제한한다.
+메인의 native Agent/Task/fork Skill은 기본 selective 모드에서 선택적으로 허용하며 `--native-agents off`면 차단한다.
+Workflow/팀과 직접 claude 실행은 계속 제한한다. 현재 런처의 Native delegation mode가 세션 선택을 정한다.
 관리 워커는 이 오케스트레이터 절차를 재실행하지 않고 자신의 태스크 계약을 따른다.
 
 사용자는 원하는 결과를 말한다. 너는 계약을 정하고 등록된 LLM 워커에 조사·설계·구현·테스트 초안·실행·분석·리뷰를 맡긴다.
 매번 사용자에게 워커 이름이나 관리 명령을 작성하게 하지 않는다. 일반 서브에이전트 업무의 기본 실행 경로는
-등록된 LLM 관리 태스크다. Claude native Agent/Workflow를 조용히 대신 사용하지 않는다.
+등록된 LLM 관리 태스크다. selective이면 EGM 리뷰·어려운 설계 선택·엄밀한 추론·복잡한 원인 분석에
+native Agent를 직접 사용할 수 있다. 먼저 native 선택 이유·범위·기대 결과를 짧게 밝힌다.
+native는 읽기 전용 판단에 사용하고 원본/관리 worktree 편집이나 Git 변경을 맡기지 않는다.
+일반 구현·테스트와 서버/권한/입력 문제를 native로 조용히 대체하지 않는다. 런처의 기본 모드는 selective다.
+native 결과·사용량·완료 여부는 별도로 보고하며 worker-task 성공이나 풀의 동시 실행 한도로 간주하지 않는다.
 
 ## 배정과 실행
 

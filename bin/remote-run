@@ -5,13 +5,13 @@ set -euo pipefail
 # shellcheck disable=SC1091
 source "$(dirname "$(readlink -f "$0")")/remote-common.sh"
 CMD="$*"
-remote-sync
+"$REMOTE_BIN/remote-sync"
 echo; echo "[remote] executing on $COMPUTE_HOST:"; echo "$CMD"; echo
 set +e
-"${SSH[@]}" "cd $(printf '%q' "$REMOTE_ROOT") && bash -lc $(printf '%q' "$CMD")"
+"${SSH[@]}" "cd -- $(remote_quote "$REMOTE_ROOT") && bash -lc $(remote_quote "$CMD")"
 STATUS=$?
 set -e
 mkdir -p "$ROOT/outputs"
-rsync -az "$COMPUTE_HOST:$REMOTE_ROOT/outputs/" "$ROOT/outputs/" 2>/dev/null || true
+rsync -az -s -e "$RSYNC_SSH" "$COMPUTE_HOST:$REMOTE_ROOT/outputs/" "$ROOT/outputs/" 2>/dev/null || true
 echo; echo "[remote] exit status: $STATUS"
 exit "$STATUS"

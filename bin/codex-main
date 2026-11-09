@@ -5,19 +5,31 @@ import os
 from pathlib import Path
 import sys
 from _kit_env import configure
+from _main_policy import native_args, render
 configure()
+try:
+    native_mode, forward = native_args(sys.argv[1:])
+except ValueError as exc:
+    print('codex-main: ' + str(exc), file=sys.stderr)
+    raise SystemExit(2)
 marker = Path(os.environ['LLM_WORKER_CONF_DIR']) / 'kit_dir'
 kit = Path(os.environ.get('LLM_WORKER_KIT') or (marker.read_text().strip() if marker.is_file() else str(Path(__file__).resolve().parent.parent)))
-policy = (kit / 'prompts/orchestrator.md').read_text().replace("Your main model uses the user's Claude account.", "Your main model uses the user's Codex account/configuration.")
-policy += '\nNative Codex spawn_agent/send_input are disabled here. Use worker-task submit and wait; owned worker labels do not determine identity.\n'
+policy = render(kit, native_mode, 'codex')
+os.environ['LLM_MAIN_NATIVE_AGENTS'] = native_mode
 if os.environ.get('LLM_POOL_DIR'):
     pool = json.loads((Path(os.environ['LLM_POOL_DIR']) / 'pool.json').read_text())
     policy += 'Your owned pool, project, state directory and worker IDs: ' + json.dumps(pool, ensure_ascii=False) + '\nSubmit JSON specs without choosing a worker unless needed. Routing uses configured roles and queue load. Do not call worker-task run: pool daemons claim queued tasks. Use worker-task wait <id> for completion; do not repeatedly poll or ask the model to wait.\n'
 os.environ['PATH'] = (os.environ.get('LLM_POOL_DIR', '') + os.pathsep if os.environ.get('LLM_POOL_DIR') else '') + str(Path(__file__).resolve().parent) + os.pathsep + os.environ.get('PATH', '')
-args = ['codex', *sys.argv[1:], '-c', 'features.multi_agent=false', '-c', 'developer_instructions=' + json.dumps(policy, ensure_ascii=False)]
+enabled = 'true' if native_mode == 'selective' else 'false'
+# Keep the legacy feature gate for supported older CLIs and the current setting.
+managed = ['-c', 'features.multi_agent=' + enabled, '-c', 'agents.enabled=' + enabled,
+           '-c', 'developer_instructions=' + json.dumps(policy, ensure_ascii=False)]
 if os.environ.get('LLM_POOL_DIR'):
-    args += ['--add-dir', os.environ['LLM_POOL_DIR']]
-    for key in ('LLM_POOL_DIR', 'LLM_TASK_HOME', 'LLM_POOL_HOME', 'LLM_WORKER_CONF_DIR', 'PATH'):
+    managed += ['--add-dir', os.environ['LLM_POOL_DIR']]
+    for key in ('LLM_POOL_DIR', 'LLM_TASK_HOME', 'LLM_POOL_HOME', 'LLM_WORKER_CONF_DIR', 'LLM_MAIN_NATIVE_AGENTS', 'PATH'):
         if key in os.environ:
-            args += ['-c', 'shell_environment_policy.set.' + key + '=' + json.dumps(os.environ[key])]
+            managed += ['-c', 'shell_environment_policy.set.' + key + '=' + json.dumps(os.environ[key])]
+# Options after -- are prompt text, so insert launcher configuration before it.
+cut = forward.index('--') if '--' in forward else len(forward)
+args = ['codex', *forward[:cut], *managed, *forward[cut:]]
 os.execvp(args[0], args)

@@ -119,9 +119,9 @@ print(json.dumps({'args': sys.argv[1:], 'env': {k:v for k,v in os.environ.items(
                      'CLAUDE_CODE_SUBAGENT_MODEL_FORCE','CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL','CLAUDE_CODE_MAX_OUTPUT_TOKENS'):
             self.assertNotIn(name, data['env'])
 
-    def test_main_defaults_to_opus_blocks_native_delegation_and_merges_context(self):
+    def test_main_off_mode_keeps_opus_blocks_native_and_merges_context(self):
         self.install('--install-only')
-        data=json.loads(subprocess.check_output([str(self.prefix/'claude-main'),'--resume','existing',
+        data=json.loads(subprocess.check_output([str(self.prefix/'claude-main'),'--native-agents','off','--resume','existing',
               '--append-system-prompt','Demo context','--disallowedTools','WebFetch','-p','work'],env=self.env,text=True))
         args=data['args']
         self.assertEqual(args[args.index('--model')+1],'opus')

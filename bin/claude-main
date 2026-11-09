@@ -10,15 +10,20 @@ if [ -z "$KIT" ]; then KIT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)";
 POLICY="$KIT/prompts/orchestrator.md"
 [ -f "$POLICY" ] || { echo 'claude-main: orchestrator prompt missing; run install.sh --update' >&2; exit 2; }
 
-# Bare deny names remove these tools from the model's tool pool. Skill is included
-# because context:fork skills can create native subagents without an explicit Agent call.
+# Off mode also denies Skill because forked skills can create native agents.
+# Default selective mode permits Agent/Task/Skill while retaining the other denies.
 MODEL="${ORCHESTRATOR_MODEL:-opus}"
-NAME="${ORCHESTRATOR_NAME:-orchestrator}"
-DENIED=(Agent Task Workflow TeamCreate Skill "Bash(claude)" "Bash(claude *)")
+NAME="${ORCHESTRATOR_NAME:-}"
+NATIVE_AGENTS=selective
+DENIED=(Workflow TeamCreate "Bash(claude)" "Bash(claude *)")
 ARGS=()
 EXTRA_PROMPT=""
 while [ $# -gt 0 ]; do
     case "$1" in
+        --native-agents)
+            [ $# -ge 2 ] || { echo '--native-agents requires off or selective' >&2; exit 2; }
+            NATIVE_AGENTS="$2"; shift 2 ;;
+        --native-agents=*) NATIVE_AGENTS="${1#*=}"; shift ;;
         --model)
             [ $# -ge 2 ] || { echo 'missing model value' >&2; exit 2; }
             MODEL="$2"; shift 2 ;;
@@ -42,7 +47,24 @@ while [ $# -gt 0 ]; do
         *) ARGS+=("$1"); shift ;;
     esac
 done
-PROMPT="$(cat "$POLICY")$EXTRA_PROMPT"
+case "$NATIVE_AGENTS" in off|selective) ;; *) echo '--native-agents must be off or selective' >&2; exit 2;; esac
+NATIVE_ENV=()
+if [ "$NATIVE_AGENTS" = off ]; then
+    DENIED+=(Agent Task Skill)
+    NATIVE_ENV+=(CLAUDE_CODE_DISABLE_EXPLORE_PLAN_AGENTS=1 CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS=1)
+fi
+if [ -z "$NAME" ]; then
+    if [ -n "${LLM_POOL_DIR:-}" ]; then
+        NAME="orchestrator-$(basename "$LLM_POOL_DIR")"
+    else
+        NAME="orchestrator-$(python3 -c 'import uuid; print(uuid.uuid4().hex[:10])')"
+    fi
+fi
+PROMPT="$(python3 "$(dirname "$(readlink -f "$0")")/_main_policy.py" --kit "$KIT" --native-agents "$NATIVE_AGENTS")$EXTRA_PROMPT"
+if [ -n "${LLM_MANUAL_WORKERS:-}" ]; then
+    PROMPT+=$'\nManual worker sessions launched with this main: '; PROMPT+="$LLM_MANUAL_WORKERS"
+    PROMPT+=$'\nThis is manual messaging mode, not a managed worker pool. Use session discovery to resolve these exact display names to live session IDs; do not guess IDs or match a name prefix. Name suffixes are display text, not model identifiers. If a name is ambiguous, do not send a task until its target is resolved. Manual sessions have no automatic task worktree or external completion verification.'
+fi
 if [ -n "${LLM_POOL_DIR:-}" ]; then
     POOL_CONTEXT="$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1])),ensure_ascii=False))' "$LLM_POOL_DIR/pool.json")"
     PROMPT+=$'\nOwned worker pool: '; PROMPT+="$POOL_CONTEXT"
@@ -84,9 +106,11 @@ exec env \
   -u LLM_MODEL \
   -u LLM_CONTEXT_WINDOW \
   -u LLM_EFFORT \
-  CLAUDE_CODE_DISABLE_EXPLORE_PLAN_AGENTS=1 \
-  CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS=1 \
+  -u CLAUDE_CODE_DISABLE_EXPLORE_PLAN_AGENTS \
+  -u CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS \
+  "${NATIVE_ENV[@]}" \
   LLM_MAIN_MANAGED_DELEGATION=1 \
+  LLM_MAIN_NATIVE_AGENTS="$NATIVE_AGENTS" \
   claude \
     --name "$NAME" \
     --model "$MODEL" \

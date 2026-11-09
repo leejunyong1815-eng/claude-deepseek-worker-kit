@@ -11,6 +11,7 @@ import sys
 import time
 from _worker_pool import BIN, create, home, identity, owned, stop, alive, repository_root
 from _backends import atomic
+from _main_policy import NATIVE_DEFAULT, NATIVE_MODES, native_args
 
 def launch(kind, args):
     p = argparse.ArgumentParser(description=__doc__)
@@ -21,6 +22,9 @@ def launch(kind, args):
     p.add_argument('-P', '--profiles', default='')
     p.add_argument('-C', '--project', type=Path, default=Path.cwd())
     p.add_argument('--label', action='append', default=[])
+    p.add_argument('-n', '--name', help='main session display name (worker ownership still uses IDs)')
+    p.add_argument('--probe', action='store_true', help='explicitly check selected APIs before starting the pool; sends model requests')
+    p.add_argument('--native-agents', choices=NATIVE_MODES, default=NATIVE_DEFAULT, help='default selective: allow EGM and difficult reasoning; off disables native delegation; ordinary work stays managed')
     modes = p.add_mutually_exclusive_group()
     modes.add_argument('--panes', action='store_true')
     modes.add_argument('--headless', action='store_true')
@@ -35,6 +39,12 @@ def launch(kind, args):
     else:
         forward = []
     a = p.parse_args(args)
+    try:
+        native_mode, forward = native_args(forward, a.native_agents)
+    except ValueError as exc:
+        p.error(str(exc))
+    if a.name and kind != 'claude':
+        p.error('--name is supported by claude-duo; Codex session naming belongs to the native CLI')
     if a.words and Path(a.words[0]).is_dir():
         a.project = Path(a.words.pop(0))
     project = repository_root(a.project)
@@ -59,8 +69,30 @@ def launch(kind, args):
         p.error('max-workers must be 1..32')
     split = lambda value: value.split(',') if value else []
     folder, data = create(project, kind, a.workers, split(a.backends), split(a.models), split(a.profiles), a.label, ' '.join(a.words), a.max_workers)
+    data['native_agents'] = native_mode
+    atomic(folder / 'pool.json', data)
+    if a.probe:
+        # Probe every selectable role model, not just each server's default.
+        from _backends import load
+        checked = set()
+        try:
+            for slot in data['workers']:
+                models = load(slot['backend'], slot['profile'])['models']
+                if slot['model']:
+                    models = [model for model in models if model['id'] == slot['model']]
+                for model in models:
+                    key = (slot['backend'], model['id'])
+                    if key in checked:
+                        continue
+                    checked.add(key)
+                    subprocess.run([str(BIN / 'llm-probe'), '--backend', key[0], '--model', key[1]], check=True)
+        except BaseException:
+            stop(folder)
+            raise
     env = dict(os.environ, LLM_POOL_DIR=str(folder), LLM_TASK_HOME=data['state_dir'])
-    main = [str(BIN / (kind + '-main')), *forward]
+    main = [str(BIN / (kind + '-main')), '--native-agents', native_mode, *forward]
+    if a.name:
+        main[1:1] = ['--name', a.name]
     print('Owned pool: ' + data['pool_id'] + ' | ' + str(len(data['workers'])) + ' workers | ' + ('panes' if a.panes else 'headless'), flush=True)
     if a.panes:
         session = data['tmux_session']

@@ -6,9 +6,10 @@ source "$(dirname "$(readlink -f "$0")")/remote-common.sh"
 echo "[remote] project : $PROJECT"
 echo "[remote] source  : $ROOT"
 echo "[remote] target  : $COMPUTE_HOST:$REMOTE_ROOT"
-"${SSH[@]}" "mkdir -p '$REMOTE_ROOT' '$REMOTE_ROOT/outputs'"
-EXCLUDES=(--exclude '.git/' --exclude '.venv/' --exclude 'venv/' --exclude 'node_modules/'
+"${SSH[@]}" "mkdir -p -- $(remote_quote "$REMOTE_ROOT") $(remote_quote "$REMOTE_ROOT/outputs")"
+EXCLUDES=(--exclude '.git' --exclude '.venv/' --exclude 'venv/' --exclude 'node_modules/'
           --exclude '__pycache__/' --exclude '.cache/' --exclude 'outputs/')
 [ -f "$ROOT/.remoteignore" ] && EXCLUDES+=(--exclude-from "$ROOT/.remoteignore")
-rsync -az --delete "${EXCLUDES[@]}" "$ROOT/" "$COMPUTE_HOST:$REMOTE_ROOT/"
+# Keep remote artifacts and stale files; automatic deletion is never implied.
+rsync -az -s -e "$RSYNC_SSH" "${EXCLUDES[@]}" "$ROOT/" "$COMPUTE_HOST:$REMOTE_ROOT/"
 echo "[remote] sync complete"
